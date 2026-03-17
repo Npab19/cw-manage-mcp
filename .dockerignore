@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+*.md
+*.json.bak
+Connectwise Manage Public Endpoints.postman_collection.json

@@ -12,6 +12,8 @@ import * as projectTools from './tools/project.js';
 import * as systemTools from './tools/system.js';
 import * as scheduleTools from './tools/schedule.js';
 import * as salesTools from './tools/sales.js';
+import * as reportingTools from './tools/reporting.js';
+import * as prompts from './prompts/index.js';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
 for (const key of required) {
@@ -35,6 +37,8 @@ function createServer(ctx: CwRequestContext): McpServer {
   systemTools.register(server, ctx);
   scheduleTools.register(server, ctx);
   salesTools.register(server, ctx);
+  reportingTools.register(server, ctx);
+  prompts.register(server);
 
   return server;
 }
