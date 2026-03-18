@@ -183,4 +183,202 @@ Compile into a skills assessment report:
         }
       }]
     }));
+
+  // ── recurring_issue_analysis ─────────────────────────────────────────
+  addPrompt(server, 'recurring_issue_analysis',
+    'Analyze recurring ticket patterns and recommend preventive actions.',
+    { boardName: z.string().optional().describe('Board name to filter (omit for all boards)') },
+    (args) => ({
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `You are a ConnectWise Manage assistant analyzing recurring issues${args.boardName ? ` for the "${args.boardName}" board` : ''}. Perform these steps:
+
+1. **Get Board ID** (if board name provided): Call get_service_boards to find the board ID for "${args.boardName ?? 'all boards'}".
+
+2. **Recurring Issues**: Call get_recurring_issues_report with${args.boardName ? ' the board ID and' : ''} days=90. This returns closed tickets grouped by type/subType ranked by frequency.
+
+3. **Top 10 Deep Dive**: For the top 10 recurring issue types, analyze:
+   - How many companies are affected (widespread vs isolated)
+   - Average resolution time (quick fixes vs time sinks)
+   - Whether the issue count is growing or shrinking
+
+4. **Knowledge Base Check**: Call get_knowledge_base_articles and search for articles related to the top recurring issues. Identify which issues have KB coverage and which don't.
+
+5. **Root Cause Analysis**: For the top 5 issues, consider:
+   - Is this a training issue (users need education)?
+   - Is this a process issue (something should be automated)?
+   - Is this a product issue (underlying system needs fixing)?
+   - Is this a documentation gap (KB article needed)?
+
+Compile into a recurring issues report:
+- **Top Recurring Issues**: ranked list with frequency, affected companies, avg resolution time
+- **Trend Analysis**: which issues are getting worse vs better
+- **KB Coverage Gaps**: recurring issues with no knowledge base articles
+- **Prevention Recommendations**: specific actions to reduce each top issue (automation, training, KB articles, vendor escalation)
+- **Estimated Impact**: hours that could be saved by addressing the top 5 issues`
+        }
+      }]
+    }));
+
+  // ── ticket_tone_review ──────────────────────────────────────────────
+  addPrompt(server, 'ticket_tone_review',
+    'Analyze the tone and sentiment of a ticket conversation to identify escalation risk.',
+    { ticketId: z.string().describe('Ticket ID to analyze') },
+    (args) => ({
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `You are a ConnectWise Manage assistant analyzing the tone of ticket #${args.ticketId}. Perform these steps:
+
+1. **Get Ticket Tone Data**: Call get_ticket_tone_analysis with id=${args.ticketId}. This returns the ticket details plus all notes with metadata (word count, timestamps, internal/external flags, time gaps between notes).
+
+2. **Conversation Flow Analysis**: Read through the notes chronologically and assess:
+   - **Customer Tone**: Is the customer calm, frustrated, angry, or satisfied? Does tone change over time?
+   - **Urgency Signals**: Look for words indicating urgency (ASAP, critical, down, emergency, unacceptable, deadline)
+   - **Frustration Indicators**: Repeated issues, escalation requests, mentions of previous tickets, capitalized text, exclamation marks
+   - **Satisfaction Signals**: Thank you messages, positive feedback, confirmation of resolution
+
+3. **Response Pattern Analysis**: Using the time gaps between notes:
+   - Are responses timely or are there long gaps?
+   - Does the customer follow up multiple times before getting a response?
+   - Is the conversation getting longer (potential complexity/frustration)?
+
+4. **Escalation Risk Assessment**: Based on the tone analysis, rate the escalation risk:
+   - **LOW**: Customer is satisfied, issue is progressing normally
+   - **MEDIUM**: Some frustration signals, but being addressed
+   - **HIGH**: Clear frustration, repeated follow-ups, or escalation language
+   - **CRITICAL**: Customer threatening to leave, executive involvement, or legal language
+
+Compile into a tone analysis report:
+- **Ticket Overview**: ticket #, summary, company, priority, current status, age
+- **Tone Timeline**: how customer sentiment changes across the conversation
+- **Key Quotes**: specific notes that indicate the strongest sentiment (positive or negative)
+- **Response Timeliness**: average response time, any notable gaps
+- **Escalation Risk Level**: LOW / MEDIUM / HIGH / CRITICAL with justification
+- **Recommended Actions**: proactive outreach, manager involvement, priority change, or no action needed`
+        }
+      }]
+    }));
+
+  // ── helpdesk_manager_weekly ─────────────────────────────────────────
+  addPromptNoArgs(server, 'helpdesk_manager_weekly',
+    'Generate a comprehensive weekly helpdesk manager report with team performance, trends, and action items.',
+    () => ({
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `You are a ConnectWise Manage assistant generating a weekly helpdesk manager report. Perform these steps:
+
+1. **Team Performance**: Call get_helpdesk_team_report with days=7. This gives per-member stats (tickets assigned, closed, hours logged, avg resolution time) and top issue types.
+
+2. **Recurring Issues**: Call get_recurring_issues_report with days=7. Compare with a 30-day call (days=30) to see if any issue types are trending up this week.
+
+3. **Escalation Status**: Call get_service_tickets with conditions "closedFlag=false AND priority/id<=2" to find open critical/high priority tickets. Note how many and how old they are.
+
+4. **SLA Compliance**: Call get_sla_compliance_report with days=7 for this week's SLA performance.
+
+5. **Board Health**: Call get_service_boards, then get_board_overview on the primary boards to check backlog levels.
+
+6. **Customer Satisfaction**: Call get_service_surveys to check if survey results are available, then get_service_survey_results for recent feedback.
+
+Compile into a weekly manager report:
+
+**EXECUTIVE SUMMARY** — 2-3 sentence overview of the week
+
+**TEAM PERFORMANCE**
+- Individual stats table: tickets closed, hours logged, avg resolution time
+- Top performer and any concerning trends
+
+**TICKET METRICS**
+- Total new vs closed this week
+- Backlog change (growing or shrinking?)
+- Top issue types this week
+
+**SLA COMPLIANCE**
+- Compliance rate by priority
+- Any SLA breaches and root causes
+
+**ESCALATIONS & RISKS**
+- Open high-priority tickets
+- Aging tickets requiring attention
+
+**RECURRING ISSUES**
+- Top recurring issues trending up
+- Prevention recommendations
+
+**ACTION ITEMS FOR NEXT WEEK**
+- Specific, actionable items with owners`
+        }
+      }]
+    }));
+
+  // ── common_issues_by_client ─────────────────────────────────────────
+  addPrompt(server, 'common_issues_by_client',
+    'Analyze a client\'s most common ticket patterns and recommend preventive measures.',
+    { companyIdentifier: z.string().describe('Company name to analyze') },
+    (args) => ({
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `You are a ConnectWise Manage assistant analyzing ticket patterns for client: "${args.companyIdentifier}". Perform these steps:
+
+1. **Company Issues Overview**: Call get_common_issues_by_company with companyIdentifier="${args.companyIdentifier}" and days=90. This returns tickets grouped by type/subType with open vs closed ratios.
+
+2. **Compare Against Baseline**: Call get_recurring_issues_report with days=90 (all boards) to get the overall issue distribution. Compare whether this client has higher-than-average rates for any issue type.
+
+3. **Open Tickets Review**: Call get_service_tickets with conditions "company/name contains '${args.companyIdentifier}' AND closedFlag=false" to see what's currently unresolved.
+
+4. **Agreement Context**: Call get_agreements with conditions "company/name contains '${args.companyIdentifier}'" to understand the service agreement. Is the ticket volume appropriate for their agreement level?
+
+Compile into a client issue analysis:
+- **Client Overview**: company name, agreement type, total tickets in period
+- **Top Issue Categories**: ranked by frequency with open/closed breakdown
+- **Anomaly Detection**: issues where this client's rate significantly exceeds the baseline
+- **One-Off vs Systemic**: which issues are isolated incidents vs recurring problems
+- **Ticket-to-Agreement Ratio**: is the client generating an appropriate ticket volume?
+- **Prevention Plan**: specific recommendations (proactive maintenance schedules, user training sessions, configuration changes, KB articles to share)
+- **Risk Assessment**: is this client at risk of dissatisfaction based on volume and patterns?`
+        }
+      }]
+    }));
+
+  // ── sla_compliance_review ───────────────────────────────────────────
+  addPromptNoArgs(server, 'sla_compliance_review',
+    'Review SLA compliance across all boards with breach analysis and improvement recommendations.',
+    () => ({
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `You are a ConnectWise Manage assistant reviewing SLA compliance. Perform these steps:
+
+1. **Overall SLA Performance**: Call get_sla_compliance_report with days=30 for last month's performance. Note average response and resolution times by priority.
+
+2. **SLA Definitions**: From the SLA compliance report, review the slaDefinitions to understand the targets. Compare actual performance against targets.
+
+3. **Worst Performers**: Call get_service_tickets with conditions "closedFlag=true" for the last 30 days, ordered by resolution time (longest first). Identify the tickets that took the longest to resolve.
+
+4. **Board-Level Breakdown**: Call get_service_boards, then call get_sla_compliance_report for each major board to identify which boards have the worst SLA compliance.
+
+5. **Priority Analysis**: For each priority level, assess:
+   - Are response times meeting SLA targets?
+   - Are resolution times meeting SLA targets?
+   - What percentage of tickets breach SLA?
+
+Compile into an SLA compliance review:
+- **Overall Compliance Rate**: percentage meeting SLA by priority
+- **Response Time Performance**: actual vs target by priority
+- **Resolution Time Performance**: actual vs target by priority
+- **Worst Breaches**: tickets with the longest resolution times (ticket #, company, priority, time to resolve)
+- **Board Comparison**: which boards perform best/worst
+- **Root Causes**: common reasons for SLA breaches (staffing gaps, complex issues, customer delays)
+- **Improvement Recommendations**: process changes, staffing adjustments, or workflow updates to improve compliance`
+        }
+      }]
+    }));
 }

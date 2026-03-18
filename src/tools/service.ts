@@ -50,4 +50,67 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
 
   addTool(server, 'get_service_impacts', 'List ticket impact levels.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/impacts', args)));
+
+  // ── Ticket count ────────────────────────────────────────────────────
+  addTool(server, 'get_service_ticket_count', 'Get total count of service tickets matching a filter (returns a number, not records).', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/tickets/count', args)));
+
+  // ── Ticket sub-resources ────────────────────────────────────────────
+  addTool(server, 'get_service_ticket_configurations', 'List managed device configurations associated with a ticket.', withTicketId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/tickets/${args.id}/configurations`, args)));
+
+  addTool(server, 'get_service_ticket_documents', 'List documents/attachments on a specific service ticket.', withTicketId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/tickets/${args.id}/documents`, args)));
+
+  addTool(server, 'get_service_ticket_products', 'List products referenced on a specific service ticket.', withTicketId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/tickets/${args.id}/products`, args)));
+
+  // ── Ticket links ────────────────────────────────────────────────────
+  addTool(server, 'get_service_ticket_links', 'List linked/related tickets across all tickets. Use conditions to filter by ticket ID.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/ticketLinks', args)));
+
+  // ── Sources & Severities ────────────────────────────────────────────
+  addTool(server, 'get_service_sources', 'List ticket sources (email, phone, portal, etc.).', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/sources', args)));
+
+  addTool(server, 'get_service_severities', 'List ticket severity levels.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/severities', args)));
+
+  addTool(server, 'get_service_teams', 'List service teams.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/teams', args)));
+
+  // ── Board sub-resources ─────────────────────────────────────────────
+  addTool(server, 'get_service_board_types', 'List ticket type definitions on a specific service board.', withBoardId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/types`, args)));
+
+  addTool(server, 'get_service_board_subtypes', 'List ticket subtype definitions on a specific service board.', withBoardId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/subtypes`, args)));
+
+  addTool(server, 'get_service_board_teams', 'List teams assigned to a specific service board.', withBoardId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/teams`, args)));
+
+  // ── Knowledge Base ──────────────────────────────────────────────────
+  addTool(server, 'get_knowledge_base_articles', 'List knowledge base articles. Use conditions to search by title or content.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/knowledgeBaseArticles', args)));
+
+  addTool(server, 'get_knowledge_base_article_by_id', 'Retrieve a single knowledge base article by its ID.', byId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/knowledgeBaseArticles/${args.id}`, { fields: args.fields })));
+
+  addTool(server, 'get_knowledge_base_categories', 'List knowledge base categories.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/knowledgeBaseCategories', args)));
+
+  addTool(server, 'get_knowledge_base_subcategories', 'List knowledge base subcategories.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/knowledgeBaseSubCategories', args)));
+
+  // ── Surveys ─────────────────────────────────────────────────────────
+  const withSurveyId: Schema = { id: z.number().int().describe('Survey ID'), ...pag };
+
+  addTool(server, 'get_service_surveys', 'List customer satisfaction surveys.', listSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/surveys', args)));
+
+  addTool(server, 'get_service_survey_questions', 'List questions on a specific survey.', withSurveyId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/surveys/${args.id}/questions`, args)));
+
+  addTool(server, 'get_service_survey_results', 'List survey results/responses for a specific survey.', withSurveyId,
+    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/surveys/${args.id}/results`, args)));
 }

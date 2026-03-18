@@ -81,13 +81,15 @@ Key design decisions:
 
 ### Available Tools
 
-60 tools across 9 modules — 55 single-endpoint tools plus 5 composite reporting tools:
+80 tools across 9 modules — 70 single-endpoint tools plus 10 composite reporting tools:
 
 #### Single-Endpoint Tools
 
 | Module | Tools |
 |--------|-------|
-| **Service** | `get_service_tickets`, `get_service_ticket_by_id`, `get_service_ticket_notes`, `get_service_ticket_time_entries`, `get_service_ticket_tasks`, `get_service_boards`, `get_service_board_statuses`, `get_service_priorities`, `get_service_slas`, `get_service_impacts` |
+| **Service** | `get_service_tickets`, `get_service_ticket_by_id`, `get_service_ticket_notes`, `get_service_ticket_time_entries`, `get_service_ticket_tasks`, `get_service_ticket_count`, `get_service_ticket_configurations`, `get_service_ticket_documents`, `get_service_ticket_products`, `get_service_ticket_links`, `get_service_boards`, `get_service_board_statuses`, `get_service_board_types`, `get_service_board_subtypes`, `get_service_board_teams`, `get_service_priorities`, `get_service_slas`, `get_service_impacts`, `get_service_sources`, `get_service_severities`, `get_service_teams` |
+| **Knowledge Base** | `get_knowledge_base_articles`, `get_knowledge_base_article_by_id`, `get_knowledge_base_categories`, `get_knowledge_base_subcategories` |
+| **Surveys** | `get_service_surveys`, `get_service_survey_questions`, `get_service_survey_results` |
 | **Company** | `get_companies`, `get_company_by_id`, `get_company_sites`, `get_company_notes`, `get_contacts`, `get_contact_by_id`, `get_contact_communications`, `get_contact_notes`, `get_company_configurations`, `get_company_configuration_by_id` |
 | **Finance** | `get_agreements`, `get_agreement_by_id`, `get_agreement_additions`, `get_agreement_adjustments`, `get_agreement_sites`, `get_agreement_recap`, `get_agreement_types` |
 | **Time** | `get_time_entries`, `get_time_entry_by_id`, `get_time_sheets`, `get_time_sheet_by_id`, `get_work_roles`, `get_work_types`, `get_charge_codes` |
@@ -109,19 +111,41 @@ These tools combine multiple API calls into a single response, designed for MSP 
 | `get_agreement_profitability` | Agreement financial overview — agreement details, additions, adjustments, and billing recap. |
 | `get_board_overview` | Service board dashboard — board details, statuses, and open ticket counts per status. |
 | `get_tech_skills_report` | Technician skills assessment — member profile, skills inventory, recent tickets, and time entries with computed summaries. |
+| `get_recurring_issues_report` | Recurring issue analysis — groups closed tickets by type/subType over a date range, ranked by frequency with affected companies and avg resolution time. |
+| `get_ticket_tone_analysis` | Ticket tone/sentiment data — ticket details plus all notes with word counts, timestamps, internal/external flags, and time gaps for AI-driven sentiment analysis. |
+| `get_common_issues_by_company` | Per-company issue patterns — tickets grouped by type/subType with open vs closed ratios and frequency ranking. |
+| `get_helpdesk_team_report` | Team performance report — per-member stats (tickets assigned/closed, hours logged, avg resolution time) plus top issue types. |
+| `get_sla_compliance_report` | SLA compliance analysis — response and resolution times by priority vs SLA targets, with full SLA and priority definitions. |
 
 Composite tools return partial results with an `_errors` array if any sub-call fails, so they never crash on a single API error.
 
 ### Available Prompts
 
-5 MCP prompts provide pre-built AI workflows for common MSP tasks. Prompts guide the AI to call the right tools in the right order and compile results into structured reports.
+10 MCP prompts provide pre-built AI workflows for common MSP tasks. Prompts guide the AI to call the right tools in the right order and compile results into structured reports.
+
+#### Operational Prompts
 
 | Prompt | Args | Description |
 |--------|------|-------------|
 | `daily_standup` | — | Morning briefing: open tickets by priority, SLA risks, time logging status, and action items. |
+| `escalation_check` | — | Escalation checklist: SLA breaches, unassigned high-priority tickets, aging tickets, and stalled items. |
+| `helpdesk_manager_weekly` | — | Comprehensive weekly report: team performance, ticket metrics, SLA compliance, recurring issues, and action items. |
+
+#### Analysis Prompts
+
+| Prompt | Args | Description |
+|--------|------|-------------|
+| `recurring_issue_analysis` | `boardName` (optional) | Pattern detection: top recurring issues, KB gap analysis, root cause categorization, and prevention recommendations. |
+| `ticket_tone_review` | `ticketId` | Sentiment analysis: conversation tone timeline, frustration indicators, escalation risk level (LOW/MEDIUM/HIGH/CRITICAL), and recommended actions. |
+| `common_issues_by_client` | `companyIdentifier` | Per-client issue patterns: anomaly detection vs baseline, one-off vs systemic classification, and prevention planning. |
+| `sla_compliance_review` | — | SLA performance review: compliance rates, worst breaches, board comparison, and improvement recommendations. |
+
+#### People Prompts
+
+| Prompt | Args | Description |
+|--------|------|-------------|
 | `client_review` | `companyIdentifier` | Client health review: open tickets, agreement status, recent engagement, and account recommendations. |
 | `tech_productivity` | `memberIdentifier` | Technician productivity report: utilization rate, ticket throughput, resolution time, and skills coverage. |
-| `escalation_check` | — | Escalation checklist: SLA breaches, unassigned high-priority tickets, aging tickets, and stalled items. |
 | `tech_skills_report` | `memberIdentifier` | Skills assessment: skill inventory, work profile analysis, skill gaps, and training recommendations. |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -252,7 +276,7 @@ https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKe
    ```
    https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKey=xyz789
    ```
-4. Save — Claude will discover all 60 tools and 5 prompts automatically
+4. Save — Claude will discover all 80 tools and 10 prompts automatically
 
 ### Example — list open tickets on a specific board
 
@@ -347,6 +371,9 @@ Credentials are **never** stored in server state, `.env`, or logs. They exist on
 - [x] Composite reporting tools (ticket summary, utilization, agreement profitability, board overview, tech skills)
 - [x] MCP prompts for MSP workflows (standup, client review, productivity, escalation, skills report)
 - [x] Auto-publish Docker image to GHCR on push
+- [x] Helpdesk manager tools (recurring issues, ticket tone analysis, team performance, SLA compliance)
+- [x] Knowledge base, surveys, ticket sources, severities, board types/subtypes
+- [x] Advanced prompts (weekly manager report, tone review, client issue analysis, SLA review)
 - [ ] Expense module tools
 - [ ] Procurement / catalog tools
 - [ ] Marketing module tools
