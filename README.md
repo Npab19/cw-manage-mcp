@@ -41,6 +41,7 @@
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
         <li><a href="#running-with-docker">Running with Docker</a></li>
+        <li><a href="#pre-built-docker-image">Pre-built Docker Image</a></li>
         <li><a href="#cloudflare-tunnel">Cloudflare Tunnel</a></li>
       </ul>
     </li>
@@ -80,7 +81,9 @@ Key design decisions:
 
 ### Available Tools
 
-55 GET-only tools across 8 ConnectWise modules:
+60 tools across 9 modules — 55 single-endpoint tools plus 5 composite reporting tools:
+
+#### Single-Endpoint Tools
 
 | Module | Tools |
 |--------|-------|
@@ -94,6 +97,32 @@ Key design decisions:
 | **Sales** | `get_opportunities`, `get_opportunity_by_id`, `get_opportunity_forecast`, `get_opportunity_notes`, `get_sales_activities` |
 
 All list tools support ConnectWise's full query syntax: `conditions`, `childConditions`, `customFieldConditions`, `orderBy`, `fields`, `page`, `pageSize`, and `pageId`.
+
+#### Composite Reporting Tools
+
+These tools combine multiple API calls into a single response, designed for MSP reporting workflows:
+
+| Tool | Description |
+|------|-------------|
+| `get_ticket_summary` | Complete ticket view — ticket details, notes, time entries, and tasks in one call. Includes computed totals (hours logged, tasks completed). |
+| `get_member_utilization` | Technician utilization report — logged hours vs scheduled hours for a date range, with utilization percentage. |
+| `get_agreement_profitability` | Agreement financial overview — agreement details, additions, adjustments, and billing recap. |
+| `get_board_overview` | Service board dashboard — board details, statuses, and open ticket counts per status. |
+| `get_tech_skills_report` | Technician skills assessment — member profile, skills inventory, recent tickets, and time entries with computed summaries. |
+
+Composite tools return partial results with an `_errors` array if any sub-call fails, so they never crash on a single API error.
+
+### Available Prompts
+
+5 MCP prompts provide pre-built AI workflows for common MSP tasks. Prompts guide the AI to call the right tools in the right order and compile results into structured reports.
+
+| Prompt | Args | Description |
+|--------|------|-------------|
+| `daily_standup` | — | Morning briefing: open tickets by priority, SLA risks, time logging status, and action items. |
+| `client_review` | `companyIdentifier` | Client health review: open tickets, agreement status, recent engagement, and account recommendations. |
+| `tech_productivity` | `memberIdentifier` | Technician productivity report: utilization rate, ticket throughput, resolution time, and skills coverage. |
+| `escalation_check` | — | Escalation checklist: SLA breaches, unassigned high-priority tickets, aging tickets, and stalled items. |
+| `tech_skills_report` | `memberIdentifier` | Skills assessment: skill inventory, work profile analysis, skill gaps, and training recommendations. |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -147,6 +176,32 @@ docker compose down
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+### Pre-built Docker Image
+
+A pre-built image is published to GitHub Container Registry on every push to `master`:
+
+```sh
+docker pull ghcr.io/npab19/cw-manage-mcp:latest
+```
+
+To use it in `docker-compose.yml` instead of building locally:
+
+```yaml
+services:
+  cw-manage-mcp:
+    image: ghcr.io/npab19/cw-manage-mcp:latest
+    expose:
+      - "3000"
+    environment:
+      - CW_CLIENT_ID=${CW_CLIENT_ID}
+      - CW_BASE_URL=${CW_BASE_URL}
+      - CW_CODEBASE=${CW_CODEBASE}
+      - PORT=3000
+    restart: unless-stopped
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ### Cloudflare Tunnel
 
 The included `docker-compose.yml` runs a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) sidecar that exposes the MCP server publicly without opening any inbound firewall ports.
@@ -197,7 +252,7 @@ https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKe
    ```
    https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKey=xyz789
    ```
-4. Save — Claude will discover all 55 tools automatically
+4. Save — Claude will discover all 60 tools and 5 prompts automatically
 
 ### Example — list open tickets on a specific board
 
@@ -289,6 +344,9 @@ Credentials are **never** stored in server state, `.env`, or logs. They exist on
 - [x] Docker + Cloudflare Tunnel deployment
 - [x] Full pagination support (`page`, `pageSize`, `pageId`, `Link` header)
 - [x] URL query parameter authentication (no per-tool credential arguments)
+- [x] Composite reporting tools (ticket summary, utilization, agreement profitability, board overview, tech skills)
+- [x] MCP prompts for MSP workflows (standup, client review, productivity, escalation, skills report)
+- [x] Auto-publish Docker image to GHCR on push
 - [ ] Expense module tools
 - [ ] Procurement / catalog tools
 - [ ] Marketing module tools
