@@ -1,5 +1,12 @@
+import pLimit from 'p-limit';
 import { buildAuthHeaders } from './auth.js';
 import { CwRequestContext, PaginationParams, ToolResult } from './types.js';
+
+const CW_TIMEOUT_MS = 180_000;
+const CW_CONCURRENCY = 10;
+const FIVE_XX_RETRY_DELAY_MS = 1_000;
+
+const limit = pLimit(CW_CONCURRENCY);
 
 function buildUrl(path: string, params: PaginationParams): string {
   const baseUrl = process.env.CW_BASE_URL!.replace(/\/$/, '');
@@ -19,22 +26,80 @@ function buildUrl(path: string, params: PaginationParams): string {
   return url.toString();
 }
 
+function parseNextPageUrl(linkHeader: string | undefined): string | undefined {
+  if (!linkHeader) return undefined;
+  for (const segment of linkHeader.split(',')) {
+    const match = /<([^>]+)>\s*;\s*rel\s*=\s*"?next"?/i.exec(segment.trim());
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
+function parseRetryAfterMs(headerValue: string | null): number | null {
+  if (!headerValue) return null;
+  const asNumber = Number(headerValue);
+  if (!Number.isNaN(asNumber) && asNumber >= 0) return Math.floor(asNumber * 1_000);
+  const asDate = Date.parse(headerValue);
+  if (!Number.isNaN(asDate)) return Math.max(0, asDate - Date.now());
+  return null;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchOnce(url: string, headers: Record<string, string>): Promise<Response> {
+  try {
+    return await fetchWithTimeout(url, { method: 'GET', headers }, CW_TIMEOUT_MS);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`ConnectWise call timed out after ${CW_TIMEOUT_MS / 1000}s for ${url}`);
+    }
+    throw err;
+  }
+}
+
+async function fetchWithRetry(url: string, headers: Record<string, string>): Promise<Response> {
+  const first = await fetchOnce(url, headers);
+  if (first.ok) return first;
+  const isRetryable = first.status === 429 || (first.status >= 500 && first.status < 600);
+  if (!isRetryable) return first;
+
+  let delayMs: number;
+  if (first.status === 429) {
+    const retryAfter = parseRetryAfterMs(first.headers.get('Retry-After'));
+    delayMs = retryAfter ?? FIVE_XX_RETRY_DELAY_MS;
+  } else {
+    delayMs = FIVE_XX_RETRY_DELAY_MS;
+  }
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+  return await fetchOnce(url, headers);
+}
+
 /**
  * Core fetch wrapper for all ConnectWise Manage API calls.
- * - 401/403: surfaces a clear permission error to the caller (not a server error)
- * - 404: surfaces a not-found message
- * - 429: surfaces rate-limit info with Retry-After
- * - Other errors: forwards original CW status + body for debugging
+ * - 180s abort timeout; aborted requests surface a clear timeout error.
+ * - One retry on 429 (honoring Retry-After) and on 5xx (1s linear backoff).
+ * - Module-scoped concurrency limiter (max 10 in-flight CW calls process-wide).
+ * - 401/403: clear permission error. 404: not-found. Other: forwards CW status + body.
+ * - Returns `nextPageUrl` parsed from the `Link: <...>; rel="next"` header when present.
  */
 export async function cwFetch<T = unknown>(
   ctx: CwRequestContext,
   path: string,
   params: PaginationParams = {}
-): Promise<{ data: T; linkHeader?: string }> {
+): Promise<{ data: T; linkHeader?: string; nextPageUrl?: string }> {
   const url = buildUrl(path, params);
   const headers = buildAuthHeaders(ctx);
 
-  const response = await fetch(url, { method: 'GET', headers });
+  const response = await limit(() => fetchWithRetry(url, headers));
 
   if (!response.ok) {
     const body = await response.text();
@@ -62,7 +127,7 @@ export async function cwFetch<T = unknown>(
     if (response.status === 429) {
       const retryAfter = response.headers.get('Retry-After') ?? 'unknown';
       throw new Error(
-        `ConnectWise rate limit exceeded (HTTP 429). Please retry after ${retryAfter} second(s).`
+        `ConnectWise rate limit exceeded (HTTP 429) after retry. Please retry after ${retryAfter} second(s).`
       );
     }
 
@@ -70,9 +135,30 @@ export async function cwFetch<T = unknown>(
   }
 
   const linkHeader = response.headers.get('Link') ?? undefined;
+  const nextPageUrl = parseNextPageUrl(linkHeader);
   const data = (await response.json()) as T;
 
-  return { data, linkHeader };
+  return { data, linkHeader, nextPageUrl };
+}
+
+/**
+ * Fetches the next page from a parsed `Link: rel="next"` URL produced by cwFetch.
+ * Used by composite reporting tools to walk pagination until exhausted.
+ */
+export async function cwFetchNextPage<T = unknown>(
+  ctx: CwRequestContext,
+  nextPageUrl: string
+): Promise<{ data: T; linkHeader?: string; nextPageUrl?: string }> {
+  const headers = buildAuthHeaders(ctx);
+  const response = await limit(() => fetchWithRetry(nextPageUrl, headers));
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`ConnectWise pagination follow-up failed (HTTP ${response.status}): ${body}`);
+  }
+  const linkHeader = response.headers.get('Link') ?? undefined;
+  const next = parseNextPageUrl(linkHeader);
+  const data = (await response.json()) as T;
+  return { data, linkHeader, nextPageUrl: next };
 }
 
 /**
