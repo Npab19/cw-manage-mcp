@@ -8,6 +8,11 @@ import {
   callbackHandler,
   logoutHandler,
 } from './auth.js';
+import {
+  setupGetHandler,
+  setupPostHandler,
+  testCwConnectionHandler,
+} from './setup.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -19,6 +24,10 @@ export function buildAdminRouter(): Router {
   const router = Router();
 
   router.use('/static', express.static(ADMIN_STATIC_DIR, { maxAge: '1h' }));
+
+  router.get('/setup', setupGetHandler);
+  router.post('/setup', setupPostHandler);
+  router.post('/setup/test-cw', testCwConnectionHandler);
 
   router.get('/login', (req, res, next) => {
     if (typeof req.query.returnTo === 'string') {

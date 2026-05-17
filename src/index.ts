@@ -32,6 +32,10 @@ import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
 import { getCwConnection } from './config.js';
 import { buildAdminRouter, ADMIN_VIEWS_DIR } from './admin/router.js';
+import { generateBootstrapCode } from './admin/auth.js';
+import { getSql } from './db.js';
+// @ts-expect-error -- express-ejs-layouts ships untyped, but it's a one-liner middleware.
+import expressLayouts from 'express-ejs-layouts';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
 for (const key of required) {
@@ -150,6 +154,8 @@ app.use(requestContextMiddleware);
 
 app.set('view engine', 'ejs');
 app.set('views', ADMIN_VIEWS_DIR);
+app.use(expressLayouts);
+app.set('layout', 'layout');
 
 app.use('/admin', buildAdminRouter());
 
@@ -190,6 +196,7 @@ async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {
     await pingDb();
     await runMigrations();
+    await emitBootstrapIfNeeded();
   } else {
     console.warn('DATABASE_URL not set — running without the dashboard DB (legacy mode).');
   }
@@ -200,6 +207,18 @@ async function start(): Promise<void> {
       console.log(`OAuth metadata: ${process.env.PUBLIC_BASE_URL}${PROTECTED_RESOURCE_METADATA_PATH}`);
     }
   });
+}
+
+async function emitBootstrapIfNeeded(): Promise<void> {
+  const sql = getSql();
+  const rows = await sql<{ setup_completed_at: Date | null }[]>`
+    SELECT setup_completed_at FROM setup_state WHERE id = 1
+  `;
+  if (rows[0]?.setup_completed_at) return;
+  const code = generateBootstrapCode();
+  const host = process.env.PUBLIC_BASE_URL ?? `http://localhost:${process.env.PORT ?? '3000'}`;
+  console.log(`[BOOTSTRAP] Setup required. Visit: ${host}/admin/setup?code=${code}`);
+  console.log('[BOOTSTRAP] This URL is valid for one setup attempt. The code rotates if the container restarts before setup completes.');
 }
 
 start().catch((err) => {

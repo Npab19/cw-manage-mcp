@@ -1,0 +1,82 @@
+<section class="card">
+  <h1>Setup wizard</h1>
+  <p class="muted">First-run configuration. The bootstrap URL is single-use — once you submit this form successfully, this wizard locks for good.</p>
+
+  <% if (errors && errors.length) { %>
+    <% for (const err of errors) { %>
+      <div class="flash error"><%= err %></div>
+    <% } %>
+  <% } %>
+
+  <form method="post" action="/admin/setup?code=<%= code %>">
+    <h2>1. Identity provider (OAuth)</h2>
+    <label>IdP issuer URL
+      <input type="url" name="oauthIssuer" required placeholder="https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0" value="<%= form.oauthIssuer || '' %>" />
+    </label>
+    <label>OAuth client ID (Entra App Registration "Application (client) ID")
+      <input type="text" name="oauthClientId" required value="<%= form.oauthClientId || '' %>" />
+    </label>
+    <label>OAuth client secret
+      <input type="password" name="oauthClientSecret" required value="<%= form.oauthClientSecret || '' %>" />
+    </label>
+    <label>Allowed email domains (comma-separated)
+      <input type="text" name="allowedEmailDomains" required placeholder="example.com,partner.com" value="<%= form.allowedEmailDomains || '' %>" />
+    </label>
+    <label>Public base URL of this server (no trailing slash)
+      <input type="url" name="publicBaseUrl" required placeholder="https://cwmcp.example.com" value="<%= form.publicBaseUrl || '' %>" />
+    </label>
+
+    <h2>2. First admin email</h2>
+    <p class="muted">This email is added to <code>extra_admin_emails</code> and grants dashboard access. It must end with one of the allowed domains above.</p>
+    <label>Admin email
+      <input type="email" name="adminEmail" required placeholder="you@example.com" value="<%= form.adminEmail || '' %>" />
+    </label>
+
+    <h2>3. ConnectWise connection</h2>
+    <label>CW base URL
+      <select name="cwRegion" onchange="document.getElementsByName('cwBaseUrl')[0].value = this.value === 'custom' ? '' : this.value;">
+        <option value="">— pick a region —</option>
+        <% for (const [key, url] of Object.entries(regionOptions)) { %>
+          <option value="<%= url %>"><%= key.toUpperCase() %> (<%= url %>)</option>
+        <% } %>
+        <option value="custom">Custom (on-premise)</option>
+      </select>
+    </label>
+    <input type="url" name="cwBaseUrl" required placeholder="https://api-na.myconnectwise.net" value="<%= form.cwBaseUrl || '' %>" />
+
+    <label>CW codebase
+      <select name="cwCodebase" required>
+        <% for (const cb of codebaseOptions) { %>
+          <option value="<%= cb %>" <%= (form.cwCodebase === cb || (!form.cwCodebase && cb === 'v2025_1')) ? 'selected' : '' %>><%= cb %></option>
+        <% } %>
+      </select>
+    </label>
+    <label>CW client ID (your integration GUID)
+      <input type="text" name="cwClientId" required value="<%= form.cwClientId || '' %>" />
+    </label>
+    <label>CW company ID
+      <input type="text" name="cwCompanyId" required value="<%= form.cwCompanyId || '' %>" />
+    </label>
+    <label>CW public key
+      <input type="text" name="cwPublicKey" required value="<%= form.cwPublicKey || '' %>" />
+    </label>
+    <label>CW private key
+      <input type="password" name="cwPrivateKey" required value="<%= form.cwPrivateKey || '' %>" />
+    </label>
+
+    <p style="margin-top: 16px;">
+      <button type="button" class="button secondary"
+        hx-post="/admin/setup/test-cw?code=<%= code %>"
+        hx-include="[name='cwBaseUrl'],[name='cwCodebase'],[name='cwClientId'],[name='cwCompanyId'],[name='cwPublicKey'],[name='cwPrivateKey']"
+        hx-target="#test-result"
+        hx-swap="innerHTML">
+        Test CW connection
+      </button>
+      <span id="test-result" class="muted" style="margin-left: 12px;"></span>
+    </p>
+
+    <p style="margin-top: 24px;">
+      <input type="submit" value="Complete setup" />
+    </p>
+  </form>
+</section>

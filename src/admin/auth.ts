@@ -235,11 +235,12 @@ setInterval(() => {
 
 export { ADMIN_AUDIENCE };
 
-// Stub used by the setup-wizard flow before sessions exist — verifies
-// the random hex bootstrap code from the container logs.
+// In-memory bootstrap code used by the setup wizard before any admin
+// session exists. Lost on container restart by design — rotates if the
+// container restarts before setup completes.
 let bootstrapCode: string | null = null;
 export function generateBootstrapCode(): string {
-  bootstrapCode = base64UrlEncode(randomBytes(16));
+  bootstrapCode = randomBytes(16).toString('hex');
   return bootstrapCode;
 }
 export function consumeBootstrapCode(code: string): boolean {
@@ -249,4 +250,7 @@ export function consumeBootstrapCode(code: string): boolean {
 }
 export function bootstrapCodeMatches(code: string): boolean {
   return !!bootstrapCode && code === bootstrapCode;
+}
+export function getBootstrapCode(): string | null {
+  return bootstrapCode;
 }
