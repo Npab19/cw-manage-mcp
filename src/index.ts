@@ -129,6 +129,31 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(requestContextMiddleware);
 
+app.get('/healthz', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.get('/readyz', async (_req, res) => {
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    res.status(503).json({ status: 'not_ready', missing });
+    return;
+  }
+  const baseUrl = process.env.CW_BASE_URL!.replace(/\/$/, '');
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 5000);
+  try {
+    const resp = await fetch(baseUrl, { method: 'HEAD', signal: ac.signal });
+    res.json({ status: 'ready', cw_reachable: true, cw_status: resp.status });
+  } catch (err) {
+    res
+      .status(503)
+      .json({ status: 'not_ready', cw_reachable: false, error: err instanceof Error ? err.message : String(err) });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 registerOAuthRoutes(app);
 
 app.post('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));

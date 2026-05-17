@@ -1,13 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { RequestHandler } from 'express';
 
-/**
- * Assigns a UUID request ID, echoes it via X-Request-Id, and emits one
- * structured JSON log line per request on response finish.
- *
- * Phase 0 will replace this with a fuller logging story (Pino). The
- * shape of the log line is the same so the swap is mechanical.
- */
+function extractMcpToolName(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as { method?: unknown; params?: { name?: unknown } };
+  if (b.method !== 'tools/call') return null;
+  return typeof b.params?.name === 'string' ? b.params.name : null;
+}
+
 export const requestContextMiddleware: RequestHandler = (req, res, next) => {
   const requestId = randomUUID();
   req.requestId = requestId;
@@ -21,6 +21,7 @@ export const requestContextMiddleware: RequestHandler = (req, res, next) => {
       requestId,
       method: req.method,
       path: req.path,
+      tool: extractMcpToolName((req as { body?: unknown }).body),
       status: res.statusCode,
       durationMs,
       authSub: req.oauth?.sub ?? null,
