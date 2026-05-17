@@ -29,6 +29,7 @@ import {
 import { requestContextMiddleware } from './middleware/request-context.js';
 import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
+import { getCwConnection } from './config.js';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
 for (const key of required) {
@@ -98,26 +99,29 @@ function extractCredentialsFromQuery(req: Request): CwRequestContext | null {
   const companyId = req.query.companyId as string | undefined;
   const publicKey = req.query.publicKey as string | undefined;
   const privateKey = req.query.privateKey as string | undefined;
+  const baseUrl = process.env.CW_BASE_URL;
+  const codebase = process.env.CW_CODEBASE;
+  const clientId = process.env.CW_CLIENT_ID;
 
-  if (!companyId || !publicKey || !privateKey) {
+  if (!companyId || !publicKey || !privateKey || !baseUrl || !codebase || !clientId) {
     return null;
   }
 
-  return { companyId, publicKey, privateKey };
-}
-
-function getServerSideCredentials(): CwRequestContext {
-  return {
-    companyId: process.env.CW_COMPANY_ID!,
-    publicKey: process.env.CW_PUBLIC_KEY!,
-    privateKey: process.env.CW_PRIVATE_KEY!,
-  };
+  return { baseUrl, codebase, clientId, companyId, publicKey, privateKey };
 }
 
 async function handleMcpRequest(req: Request, res: Response, body?: unknown): Promise<void> {
-  const ctx = isOAuthConfigured()
-    ? getServerSideCredentials()
-    : extractCredentialsFromQuery(req);
+  let ctx: CwRequestContext | null;
+  if (isOAuthConfigured()) {
+    const conn = await getCwConnection();
+    if (!conn || !conn.companyId || !conn.publicKey || !conn.privateKey) {
+      res.status(503).json({ error: 'CW connection is not configured. Complete the setup wizard at /admin/setup.' });
+      return;
+    }
+    ctx = conn;
+  } else {
+    ctx = extractCredentialsFromQuery(req);
+  }
   if (!ctx) {
     res
       .status(401)

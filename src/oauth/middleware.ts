@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet, type JWTPayload } from 'jose';
 import { getJwksDoc } from './keys.js';
 import { getPublicBaseUrl } from './base-url.js';
+import { getOauthProvider } from '../config.js';
 
 const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
 
@@ -34,9 +35,9 @@ function sendForbidden(res: Parameters<RequestHandler>[1], description: string):
   res.status(403).json({ error: 'forbidden', error_description: description });
 }
 
-function getAllowedDomains(): string[] {
-  const raw = process.env.OAUTH_ALLOWED_EMAIL_DOMAINS ?? '';
-  return raw.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+async function getAllowedDomains(): Promise<string[]> {
+  const provider = await getOauthProvider();
+  return provider?.allowedEmailDomains ?? [];
 }
 
 export const oauthMiddleware: RequestHandler = async (req, res, next) => {
@@ -74,7 +75,7 @@ export const oauthMiddleware: RequestHandler = async (req, res, next) => {
     sendForbidden(res, 'Token has no email claim');
     return;
   }
-  const allowed = getAllowedDomains();
+  const allowed = await getAllowedDomains();
   const domain = email.split('@')[1]?.toLowerCase();
   if (!domain || !allowed.includes(domain)) {
     sendForbidden(res, `Email '${email}' is not in an allowed domain (${allowed.join(', ')})`);

@@ -8,9 +8,9 @@ const FIVE_XX_RETRY_DELAY_MS = 1_000;
 
 const limit = pLimit(CW_CONCURRENCY);
 
-function buildUrl(path: string, params: PaginationParams): string {
-  const baseUrl = process.env.CW_BASE_URL!.replace(/\/$/, '');
-  const codebase = process.env.CW_CODEBASE!;
+function buildUrl(ctx: CwRequestContext, path: string, params: PaginationParams): string {
+  const baseUrl = ctx.baseUrl.replace(/\/$/, '');
+  const codebase = ctx.codebase;
   const url = new URL(`${baseUrl}/${codebase}/apis/3.0${path}`);
 
   if (params.conditions) url.searchParams.set('conditions', params.conditions);
@@ -96,7 +96,7 @@ export async function cwFetch<T = unknown>(
   path: string,
   params: PaginationParams = {}
 ): Promise<{ data: T; linkHeader?: string; nextPageUrl?: string }> {
-  const url = buildUrl(path, params);
+  const url = buildUrl(ctx, path, params);
   const headers = buildAuthHeaders(ctx);
 
   const response = await limit(() => fetchWithRetry(url, headers));

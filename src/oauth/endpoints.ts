@@ -19,17 +19,15 @@ import {
 import { getKeys } from './keys.js';
 import { generateVerifier, challengeFromVerifier, base64UrlEncode } from './pkce.js';
 import { getPublicBaseUrl } from './base-url.js';
+import { getOauthProvider } from '../config.js';
 
 const STATIC_CLIENT_ID = 'mcp-public-client';
 
-function getAllowedDomains(): string[] {
-  const raw = process.env.OAUTH_ALLOWED_EMAIL_DOMAINS ?? '';
-  return raw.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
-}
-
-function isAllowedEmail(email: string): boolean {
+async function isAllowedEmail(email: string): Promise<boolean> {
+  const provider = await getOauthProvider();
+  const allowed = provider?.allowedEmailDomains ?? [];
   const domain = email.split('@')[1]?.toLowerCase();
-  return !!domain && getAllowedDomains().includes(domain);
+  return !!domain && allowed.includes(domain);
 }
 
 export const registerHandler: RequestHandler = (req, res) => {
@@ -110,9 +108,10 @@ export const authorizeHandler: RequestHandler = async (req, res, next) => {
 
     const endpoints = await getEntraEndpoints();
     const callbackUrl = `${getPublicBaseUrl(req)}/oauth/callback`;
-    const entraClientId = process.env.OAUTH_CLIENT_ID;
+    const provider = await getOauthProvider();
+    const entraClientId = provider?.clientId;
     if (!entraClientId) {
-      res.status(500).send('Server misconfigured: OAUTH_CLIENT_ID not set');
+      res.status(500).send('Server misconfigured: OAuth client_id not configured');
       return;
     }
     const url = new URL(endpoints.authorizationEndpoint);
@@ -198,7 +197,7 @@ export const callbackHandler: RequestHandler = async (req, res, next) => {
       );
       return;
     }
-    if (!isAllowedEmail(email)) {
+    if (!(await isAllowedEmail(email))) {
       redirectWithError(
         res,
         pending.claudeRedirectUri,

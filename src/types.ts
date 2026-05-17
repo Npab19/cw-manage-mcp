@@ -11,6 +11,9 @@ export interface PaginationParams {
 }
 
 export interface CwRequestContext {
+  baseUrl: string;
+  codebase: string;
+  clientId: string;
   companyId: string;
   publicKey: string;
   privateKey: string;

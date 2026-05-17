@@ -1,9 +1,9 @@
 import { CwRequestContext } from './types.js';
 
 /**
- * Constructs the HTTP headers required by the ConnectWise Manage API.
- *
- * Basic Auth format: Base64(companyId+publicKey:privateKey)
+ * Basic-Auth header: Base64(companyId+publicKey:privateKey). clientId
+ * comes from the request context, which is sourced from the config
+ * helper (DB-or-env precedence).
  */
 export function buildAuthHeaders(ctx: CwRequestContext): Record<string, string> {
   const raw = `${ctx.companyId}+${ctx.publicKey}:${ctx.privateKey}`;
@@ -11,7 +11,7 @@ export function buildAuthHeaders(ctx: CwRequestContext): Record<string, string> 
 
   return {
     Authorization: `Basic ${encoded}`,
-    clientId: process.env.CW_CLIENT_ID!,
+    clientId: ctx.clientId,
     Accept: 'application/vnd.connectwise.com+json; version=2021.2',
     'Content-Type': 'application/json',
   };

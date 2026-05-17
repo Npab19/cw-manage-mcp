@@ -1,4 +1,5 @@
 import { decodeJwt } from 'jose';
+import { getOauthProvider } from '../config.js';
 
 interface EntraEndpoints {
   authorizationEndpoint: string;
@@ -16,12 +17,14 @@ interface EntraTokenResponse {
   scope?: string;
 }
 
-let endpointsCache: EntraEndpoints | null = null;
+const endpointsCacheByIssuer = new Map<string, EntraEndpoints>();
 
 export async function getEntraEndpoints(): Promise<EntraEndpoints> {
-  if (endpointsCache) return endpointsCache;
-  const issuer = (process.env.OAUTH_ISSUER ?? '').replace(/\/$/, '');
-  if (!issuer) throw new Error('OAUTH_ISSUER is not set');
+  const provider = await getOauthProvider();
+  const issuer = provider?.issuer ?? '';
+  if (!issuer) throw new Error('OAuth issuer is not configured (set OAUTH_ISSUER or run the setup wizard)');
+  const cached = endpointsCacheByIssuer.get(issuer);
+  if (cached) return cached;
   const url = `${issuer}/.well-known/openid-configuration`;
   const resp = await fetch(url);
   if (!resp.ok) {
@@ -36,13 +39,14 @@ export async function getEntraEndpoints(): Promise<EntraEndpoints> {
   if (!doc.authorization_endpoint || !doc.token_endpoint || !doc.jwks_uri || !doc.issuer) {
     throw new Error(`Entra discovery doc missing required fields (${url})`);
   }
-  endpointsCache = {
+  const endpoints: EntraEndpoints = {
     authorizationEndpoint: doc.authorization_endpoint,
     tokenEndpoint: doc.token_endpoint,
     jwksUri: doc.jwks_uri,
     issuer: doc.issuer,
   };
-  return endpointsCache;
+  endpointsCacheByIssuer.set(issuer, endpoints);
+  return endpoints;
 }
 
 export async function exchangeCodeForToken(
@@ -51,10 +55,11 @@ export async function exchangeCodeForToken(
   codeVerifier: string,
 ): Promise<EntraTokenResponse> {
   const endpoints = await getEntraEndpoints();
-  const clientId = process.env.OAUTH_CLIENT_ID;
-  const clientSecret = process.env.OAUTH_CLIENT_SECRET;
+  const provider = await getOauthProvider();
+  const clientId = provider?.clientId;
+  const clientSecret = provider?.clientSecret;
   if (!clientId || !clientSecret) {
-    throw new Error('OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET must be set');
+    throw new Error('OAuth provider clientId/clientSecret are not configured');
   }
   const body = new URLSearchParams({
     client_id: clientId,
