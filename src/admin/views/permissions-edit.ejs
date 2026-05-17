@@ -1,0 +1,52 @@
+<% if (flash === 'saved') { %>
+  <div class="flash success">Policy saved. auto_derived flipped to false.</div>
+<% } %>
+
+<section class="card">
+  <h1><%= role.role_name %></h1>
+  <p class="muted">
+    <% if (role.auto_derived) { %>
+      <strong>Auto-derived</strong> — this policy was seeded by the last user import and will
+      refresh on subsequent imports.
+    <% } else { %>
+      <strong>Manual</strong> — edits locked in. Subsequent user imports leave this row alone.
+    <% } %>
+    Last update <%= role.updated_at.toISOString() %><% if (role.updated_by) { %> by <%= role.updated_by %><% } %>.
+  </p>
+
+  <% if (members.length > 0) { %>
+    <p class="muted"><strong>Members with this role:</strong>
+      <% for (let i = 0; i < members.length; i++) { %>
+        <%= i > 0 ? ', ' : '' %><%= members[i].identifier %>
+      <% } %>
+    </p>
+  <% } else { %>
+    <p class="muted">No active members currently hold this role.</p>
+  <% } %>
+
+  <form method="post" action="/admin/permissions/<%= role.role_id %>">
+    <% for (const g of groups) { %>
+      <h2 style="margin-top: 24px;"><%= g.group %></h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 16px;">
+        <% for (const t of g.tools) { %>
+          <label style="display: flex; align-items: center; gap: 6px;<% if (t.alwaysAdmin) { %> opacity: 0.5;<% } %>">
+            <input type="checkbox"
+              name="allowed_tools"
+              value="<%= t.name %>"
+              <% if (allowedSet.has(t.name) && !t.alwaysAdmin) { %>checked<% } %>
+              <% if (t.alwaysAdmin) { %>disabled<% } %> />
+            <code><%= t.name %></code>
+            <% if (t.alwaysAdmin) { %>
+              <small class="muted">(admin-only)</small>
+            <% } %>
+          </label>
+        <% } %>
+      </div>
+    <% } %>
+
+    <p style="margin-top: 24px;">
+      <input type="submit" value="Save policy" />
+      <a class="button secondary" href="/admin/permissions">Cancel</a>
+    </p>
+  </form>
+</section>

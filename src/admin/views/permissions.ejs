@@ -1,0 +1,44 @@
+<% if (flash === 'saved') { %>
+  <div class="flash success">Policy saved.</div>
+<% } %>
+
+<section class="card">
+  <h1>Permissions</h1>
+  <p class="muted">
+    Each CW security role gets an allow-list of MCP tools. Auto-derived rows are seeded from CW
+    module permissions on each user-import run; once you edit a row, it locks to manual and future
+    imports won't overwrite it.
+  </p>
+  <% if (roles.length === 0) { %>
+    <p class="muted">No roles imported yet. Run a user sync from <a href="/admin/users">Users</a> first.</p>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Members</th>
+          <th>Source</th>
+          <th>Last edit</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const r of roles) { %>
+          <tr>
+            <td><strong><%= r.role_name %></strong></td>
+            <td><%= r.member_count %></td>
+            <td>
+              <% if (r.auto_derived) { %>
+                <span class="muted">auto-derived</span>
+              <% } else { %>
+                <strong>manual</strong>
+              <% } %>
+            </td>
+            <td><%= r.updated_at.toISOString() %><% if (r.updated_by) { %> by <%= r.updated_by %><% } %></td>
+            <td><a class="button secondary" href="/admin/permissions/<%= r.role_id %>">Edit</a></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+</section>

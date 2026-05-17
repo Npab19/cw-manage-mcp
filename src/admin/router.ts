@@ -26,6 +26,11 @@ import {
   usersMapHandler,
   usersUnmapHandler,
 } from './users.js';
+import {
+  permissionsListHandler,
+  permissionsEditHandler,
+  permissionsUpdateHandler,
+} from './permissions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -71,6 +76,10 @@ export function buildAdminRouter(): Router {
   router.post('/users/sync', usersSyncHandler);
   router.post('/users/map', usersMapHandler);
   router.post('/users/unmap', usersUnmapHandler);
+
+  router.get('/permissions', permissionsListHandler);
+  router.get('/permissions/:roleId', permissionsEditHandler);
+  router.post('/permissions/:roleId', permissionsUpdateHandler);
 
   return router;
 }
