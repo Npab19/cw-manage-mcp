@@ -20,6 +20,12 @@ import {
   testCwConnectionAuthedHandler,
 } from './settings.js';
 import { auditLogGetHandler, auditLogRowsHandler, auditLogCsvHandler } from './audit-log.js';
+import {
+  usersGetHandler,
+  usersSyncHandler,
+  usersMapHandler,
+  usersUnmapHandler,
+} from './users.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -60,6 +66,11 @@ export function buildAdminRouter(): Router {
   router.get('/audit-log', auditLogGetHandler);
   router.get('/audit-log/rows', auditLogRowsHandler);
   router.get('/audit-log.csv', auditLogCsvHandler);
+
+  router.get('/users', usersGetHandler);
+  router.post('/users/sync', usersSyncHandler);
+  router.post('/users/map', usersMapHandler);
+  router.post('/users/unmap', usersUnmapHandler);
 
   return router;
 }

@@ -1,0 +1,107 @@
+<% if (flash === 'sync-ok' || (flash && flash.startsWith('sync-ok:'))) { %>
+  <div class="flash success">User import complete<% if (flash.startsWith('sync-ok:')) { %> (<%= flash.slice('sync-ok:'.length) %>)<% } %>.</div>
+<% } else if (flash === 'sync-error') { %>
+  <div class="flash error">User import failed — see container logs.</div>
+<% } else if (flash === 'map-ok') { %>
+  <div class="flash success">Mapping saved.</div>
+<% } else if (flash === 'unmap-ok') { %>
+  <div class="flash success">Mapping removed.</div>
+<% } else if (flash === 'map-missing' || flash === 'unmap-missing') { %>
+  <div class="flash error">Missing required fields.</div>
+<% } %>
+
+<section class="card">
+  <h1>Users</h1>
+  <p class="muted">
+    <% if (lastRun) { %>
+      Last sync <%= lastRun.startedAt.toISOString() %> by <%= lastRun.triggeredBy || 'unknown' %> —
+      status <strong><%= lastRun.status %></strong>:
+      <%= lastRun.rowsAdded %> added, <%= lastRun.rowsUpdated %> updated, <%= lastRun.rowsDeactivated %> deactivated.
+    <% } else { %>
+      No imports have run yet.
+    <% } %>
+  </p>
+  <form method="post" action="/admin/users/sync" style="display: inline;">
+    <input type="submit" value="Sync now" />
+  </form>
+</section>
+
+<section class="card">
+  <h2>Unmapped OAuth identities</h2>
+  <% if (unmapped.length === 0) { %>
+    <p class="muted">All seen identities are mapped to a CW member.</p>
+  <% } else { %>
+    <p class="muted">These users have signed in via OAuth but don't match any CW member's primary email. Link them manually to grant tool access.</p>
+    <table>
+      <thead><tr><th>Email</th><th>Subject (sub)</th><th>Last seen</th><th>Link to CW member</th></tr></thead>
+      <tbody>
+        <% for (const u of unmapped) { %>
+          <tr>
+            <td><%= u.email || '' %></td>
+            <td class="muted" style="font-family: ui-monospace, monospace; font-size: 12px;"><%= u.sub %></td>
+            <td><%= u.last_seen.toISOString() %></td>
+            <td>
+              <form method="post" action="/admin/users/map" style="display: flex; gap: 6px;">
+                <input type="hidden" name="oauth_sub" value="<%= u.sub %>" />
+                <select name="cw_member_id" required style="flex: 1;">
+                  <option value="">— pick a member —</option>
+                  <% for (const m of members) { %>
+                    <% if (!m.inactive_flag && !m.mapped_oauth_sub) { %>
+                      <option value="<%= m.id %>"><%= m.identifier %> — <%= m.first_name || '' %> <%= m.last_name || '' %> (<%= m.primary_email || 'no email' %>)</option>
+                    <% } %>
+                  <% } %>
+                </select>
+                <input type="submit" value="Link" />
+              </form>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="card">
+  <h2>CW members</h2>
+  <p class="muted"><%= members.length %> member(s) listed (capped at 500).</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Identifier</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Mapping</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% for (const m of members) { %>
+        <tr<% if (m.inactive_flag) { %> class="muted"<% } %>>
+          <td><code><%= m.identifier %></code></td>
+          <td><%= m.first_name || '' %> <%= m.last_name || '' %></td>
+          <td><%= m.primary_email || '' %></td>
+          <td><%= m.security_role_name || '' %></td>
+          <td>
+            <% if (m.mapped_oauth_email) { %>
+              <%= m.mapped_oauth_email %>
+              <small class="muted">(<%= m.mapping_source %>)</small>
+            <% } else { %>
+              <span class="muted">—</span>
+            <% } %>
+          </td>
+          <td><%= m.inactive_flag ? 'inactive' : 'active' %></td>
+          <td>
+            <% if (m.mapped_oauth_sub) { %>
+              <form method="post" action="/admin/users/unmap" style="display: inline;">
+                <input type="hidden" name="oauth_sub" value="<%= m.mapped_oauth_sub %>" />
+                <button type="submit" class="button secondary">Unmap</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% } %>
+    </tbody>
+  </table>
+</section>
