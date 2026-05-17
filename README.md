@@ -341,18 +341,70 @@ Cloud base URLs by region:
 <!-- AUTHENTICATION -->
 ## Authentication
 
-Per-user credentials (`companyId`, `publicKey`, `privateKey`) are passed as **URL query parameters** on the MCP endpoint. The server extracts them on each HTTP request and constructs the ConnectWise Basic Auth header:
+The server supports two auth modes — pick one per deployment:
+
+1. **URL query parameter credentials** (default, legacy) — passes CW credentials in the URL on each `/mcp` request. Fine for single-user / local-only use; leaks credentials via referer headers, proxy logs, and browser history.
+2. **OAuth 2.1 bearer tokens** (recommended) — the MCP acts as an [OAuth Resource Server](https://datatracker.ietf.org/doc/html/rfc6749#section-1.1) per the [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization). Identity comes from an external IdP (Entra ID, Auth0, Okta, Google), and the server validates bearer JWTs against the IdP's JWKS on every request. CW credentials are still set server-side (env vars today, dashboard-managed in later phases).
+
+OAuth is **disabled by default** — the server keeps the URL-param path for backward compatibility. Setting `OAUTH_ISSUER` flips the mode.
+
+### URL query parameter auth (legacy)
+
+Per-user credentials (`companyId`, `publicKey`, `privateKey`) are passed as URL query parameters on the MCP endpoint. The server extracts them on each HTTP request and constructs the ConnectWise Basic Auth header:
 
 ```
 Authorization: Basic Base64(companyId+publicKey:privateKey)
 ```
 
-If any credential query parameter is missing, the server returns HTTP `401` before processing the MCP message.
+If any credential query parameter is missing, the server returns HTTP `401` before processing the MCP message. Credentials are **never** stored in server state, `.env`, or logs. They exist only for the duration of the HTTP request.
 
-Credentials are **never** stored in server state, `.env`, or logs. They exist only for the duration of the HTTP request.
+### OAuth resource server
 
-**Error responses:**
-- `401` / `403` — returns a clear message indicating the credentials lack permission for that endpoint. Check the member's security role in CW Manage.
+Set `OAUTH_ISSUER` and `OAUTH_AUDIENCE` to enable bearer-token auth on all `/mcp` routes. The server then:
+
+- Validates every `/mcp` request's `Authorization: Bearer <jwt>` header against the IdP's JWKS using [`jose`](https://github.com/panva/jose).
+- Returns `401` with `WWW-Authenticate: Bearer resource_metadata="<discovery-url>", error="invalid_token"` per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and [RFC 6750](https://datatracker.ietf.org/doc/html/rfc6750) when the bearer is missing, invalid, expired, or has the wrong issuer/audience.
+- Serves [Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728) at `GET /.well-known/oauth-protected-resource` so MCP clients (Claude.ai, MCP Inspector, etc.) can auto-discover the authorization server.
+- Caches the IdP's JWKS for 10 minutes (configurable via `Cache-Control` on the JWKS endpoint).
+
+#### Example — Microsoft Entra ID
+
+In your Azure tenant, [register an application](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app), set its **Application ID URI** (e.g. `api://cw-manage-mcp`), and expose a scope (e.g. `mcp.access`).
+
+```bash
+# .env
+OAUTH_ISSUER=https://login.microsoftonline.com/<your-tenant-id>/v2.0
+OAUTH_AUDIENCE=api://cw-manage-mcp
+OAUTH_REQUIRED_SCOPE=mcp.access
+```
+
+Then have your MCP client authenticate via the standard OAuth 2.1 flow with that Entra app — Claude.ai and MCP Inspector both auto-discover from the protected resource metadata endpoint.
+
+*Note:* if verification fails for valid-looking Entra tokens, the `aud` claim may be the **Application ID URI**, not the client ID. Use the Application ID URI as `OAUTH_AUDIENCE`.
+
+#### Example — Auth0
+
+Create an [API](https://auth0.com/docs/get-started/apis) in your Auth0 tenant with identifier (audience) `https://cw-manage-mcp.example.com`, and create or assign a Machine-to-Machine application that's authorized for that API.
+
+```bash
+# .env
+OAUTH_ISSUER=https://<your-tenant>.auth0.com/
+OAUTH_AUDIENCE=https://cw-manage-mcp.example.com
+OAUTH_REQUIRED_SCOPE=mcp.access
+```
+
+#### Environment variables
+
+| Var | Required | Description |
+|---|---|---|
+| `OAUTH_ISSUER` | When enabling OAuth | IdP issuer URL (no trailing slash). |
+| `OAUTH_AUDIENCE` | When enabling OAuth | Expected `aud` claim — this server's identifier in the IdP. |
+| `OAUTH_JWKS_URI` | No | Explicit JWKS URI override. Derived from `${OAUTH_ISSUER}/.well-known/openid-configuration` if unset. |
+| `OAUTH_REQUIRED_SCOPE` | No | If set, every token must include this scope. |
+
+#### Error responses (both modes)
+
+- `401` / `403` — credentials missing, invalid, or lack CW permission. With OAuth enabled, `401` includes a `WWW-Authenticate` header pointing at the discovery document.
 - `404` — record not found.
 - `429` — rate limit exceeded; the `Retry-After` value is surfaced to the caller.
 - Other errors — original CW status code and response body are forwarded for debugging.
