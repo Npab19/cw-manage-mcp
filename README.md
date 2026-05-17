@@ -344,7 +344,7 @@ Cloud base URLs by region:
 The server supports two auth modes — pick one per deployment:
 
 1. **URL query parameter credentials** (default, legacy) — passes CW credentials in the URL on each `/mcp` request. Fine for single-user / local-only use; leaks credentials via referer headers, proxy logs, and browser history.
-2. **OAuth 2.1 bearer tokens** (recommended) — the MCP acts as an [OAuth Resource Server](https://datatracker.ietf.org/doc/html/rfc6749#section-1.1) per the [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization). Identity comes from an external IdP (Entra ID, Auth0, Okta, Google), and the server validates bearer JWTs against the IdP's JWKS on every request. CW credentials are still set server-side (env vars today, dashboard-managed in later phases).
+2. **OAuth 2.1 with the MCP server as Authorization Server** (recommended) — the MCP server runs a full OAuth 2.1 AS (with Dynamic Client Registration) to MCP clients like Claude.ai, and delegates the actual user login to an external IdP (Entra ID, Google, etc). The server mints its own RS256 JWTs that it validates on `/mcp`, so MCP clients see a fully spec-compliant AS even when the upstream IdP doesn't support DCR. CW credentials are set server-side via env vars.
 
 OAuth is **disabled by default** — the server keeps the URL-param path for backward compatibility. Setting `OAUTH_ISSUER` flips the mode.
 
@@ -358,40 +358,81 @@ Authorization: Basic Base64(companyId+publicKey:privateKey)
 
 If any credential query parameter is missing, the server returns HTTP `401` before processing the MCP message. Credentials are **never** stored in server state, `.env`, or logs. They exist only for the duration of the HTTP request.
 
-### OAuth resource server
+### OAuth 2.1 (MCP server as Authorization Server)
 
-Goal: **log in with your company email**. Set three env vars and any user in your IdP whose email is at one of the allowed domains can authenticate. No per-user provisioning, no scope wiring.
+Goal: **log in with your company email**. Configure the MCP server with your IdP's issuer + an App Registration's client ID/secret, and any user in your IdP whose email matches an allowed domain can authenticate. No per-user provisioning.
 
-When OAuth is configured, every `/mcp` request must carry an `Authorization: Bearer <jwt>` header. The server:
+#### Why this design
 
-1. Validates the JWT signature against the IdP's JWKS using [`jose`](https://github.com/panva/jose).
-2. Confirms the token's `iss` matches `OAUTH_ISSUER` and `aud` matches `OAUTH_AUDIENCE`.
-3. Reads the `email` claim (falls back to `preferred_username` for Entra ID) and confirms its domain is in `OAUTH_ALLOWED_EMAIL_DOMAINS`.
+The [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization) requires clients to support Dynamic Client Registration ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)) so they can register themselves with the AS on the fly. Many enterprise IdPs (notably Microsoft Entra ID's Workforce tenants) don't expose DCR. To work around this, the MCP server acts as a proxy AS:
 
-Failures return `401` with a `WWW-Authenticate` header pointing at `/.well-known/oauth-protected-resource` per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728), or `403` when the token is valid but the user's email isn't in the allowed domain list. JWKS is cached for 10 minutes.
+- To **MCP clients** (Claude.ai web, Claude Desktop's native remote connector, MCP Inspector): a full OAuth 2.1 AS with PKCE, DCR, JWKS, and refresh tokens.
+- To **the IdP**: a normal confidential OAuth client (just like any web app).
+- The MCP server brokers the auth code flow and mints its own RS256 JWTs for `/mcp` calls.
 
-#### Example — Microsoft Entra ID
+End-user experience is unchanged — they sign in with their company account at the IdP's login page. The MCP server is invisible plumbing.
 
-In your Azure tenant, [register an application](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app) and set its **Application ID URI** (e.g. `api://cw-manage-mcp`). No scope or app-role configuration needed — the email check is the gate.
+#### Endpoints exposed when OAuth is on
+
+- `GET /.well-known/oauth-protected-resource` — RFC 9728 metadata advertising this server as the AS.
+- `GET /.well-known/oauth-authorization-server` — RFC 8414 metadata with endpoints below.
+- `GET /.well-known/jwks.json` — the MCP server's public signing key (RS256).
+- `POST /oauth/register` — DCR shim (RFC 7591). Returns a static public client_id for any incoming registration.
+- `GET /oauth/authorize` — accepts the client's PKCE auth request, generates a new PKCE pair, and redirects the user to the IdP.
+- `GET /oauth/callback` — receives the IdP's auth code, exchanges it for a token, validates the email domain, mints an MCP auth code, and redirects back to the client.
+- `POST /oauth/token` — exchanges the MCP auth code (or refresh token) for an MCP-signed RS256 access token.
+
+`/mcp` requests must carry `Authorization: Bearer <mcp-jwt>`. Validation steps:
+
+1. Verify signature against this server's own JWKS.
+2. Confirm `iss` and `aud` match `PUBLIC_BASE_URL`.
+3. Confirm the `email` claim's domain is in `OAUTH_ALLOWED_EMAIL_DOMAINS`.
+
+Failures return `401` with a `WWW-Authenticate` header pointing at `/.well-known/oauth-protected-resource` per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728), or `403` when the token is valid but the email isn't in the allowed domain list.
+
+#### Setup — Microsoft Entra ID
+
+1. **Register an application** in your Azure tenant ([guide](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app)).
+2. Under **Authentication** → **Add a platform** → **Web**, add the redirect URI:
+   ```
+   ${PUBLIC_BASE_URL}/oauth/callback
+   ```
+   (e.g. `https://cwmcp.example.com/oauth/callback`)
+3. Under **Certificates & secrets** → **New client secret**, generate a secret and copy the **Value** (only shown once).
+4. Copy the **Application (client) ID** from the app's Overview page.
+5. Fill in `.env`:
 
 ```bash
 # .env
 OAUTH_ISSUER=https://login.microsoftonline.com/<your-tenant-id>/v2.0
-OAUTH_AUDIENCE=api://cw-manage-mcp
+OAUTH_CLIENT_ID=<application-client-id>
+OAUTH_CLIENT_SECRET=<client-secret-value>
 OAUTH_ALLOWED_EMAIL_DOMAINS=yourcompany.com
+PUBLIC_BASE_URL=https://cwmcp.example.com
+
+# Server-side CW credentials (required when OAuth is enabled)
+CW_COMPANY_ID=your-cw-company-id
+CW_PUBLIC_KEY=your-cw-public-key
+CW_PRIVATE_KEY=your-cw-private-key
 ```
 
-Then have your MCP client (Claude.ai, MCP Inspector) authenticate via the standard OAuth 2.1 flow with that Entra app — clients auto-discover the authorization server from `/.well-known/oauth-protected-resource`.
+6. `docker compose up --build -d` — first start generates and persists an RS256 keypair under the `oauth-keys` volume at `/data/oauth-keys.json`. Tokens issued before a key change remain valid until expiry; deleting the volume invalidates all live tokens.
 
-*Note:* if verification fails for valid-looking Entra tokens, the `aud` claim is the **Application ID URI**, not the client ID. Use the Application ID URI as `OAUTH_AUDIENCE`.
+In Claude.ai (or any MCP client), add the integration URL `https://cwmcp.example.com/mcp`. The client will discover the AS automatically, walk the user through Entra sign-in, and start calling tools — no client_id or redirect URI on the user's side.
 
 #### Environment variables
 
 | Var | Required | Description |
 |---|---|---|
-| `OAUTH_ISSUER` | When enabling OAuth | IdP issuer URL (no trailing slash). |
-| `OAUTH_AUDIENCE` | When enabling OAuth | Expected `aud` claim — this server's identifier in the IdP. |
+| `OAUTH_ISSUER` | When enabling OAuth | IdP issuer URL (no trailing slash). Used for OIDC discovery against the IdP. |
+| `OAUTH_CLIENT_ID` | When enabling OAuth | Application (client) ID of the App Registration this server uses to authenticate against the IdP. |
+| `OAUTH_CLIENT_SECRET` | When enabling OAuth | Client secret of the same App Registration. |
 | `OAUTH_ALLOWED_EMAIL_DOMAINS` | When enabling OAuth | Comma-separated list of email domains allowed to authenticate (e.g. `acme.com,partner.com`). Case-insensitive. |
+| `PUBLIC_BASE_URL` | When enabling OAuth | Public URL of this MCP server (no trailing slash). Used as the JWT issuer/audience and the basis for the OAuth callback URL. |
+| `OAUTH_KEY_FILE` | No (default: `/data/oauth-keys.json`) | Path where the RS256 signing keypair is persisted. |
+| `CW_COMPANY_ID` | When enabling OAuth | Server-side ConnectWise company ID. Replaces the URL-param `companyId` in OAuth mode. |
+| `CW_PUBLIC_KEY` | When enabling OAuth | Server-side ConnectWise API public key. |
+| `CW_PRIVATE_KEY` | When enabling OAuth | Server-side ConnectWise API private key. |
 
 #### Error responses (both modes)
 

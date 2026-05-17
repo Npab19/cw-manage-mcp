@@ -18,9 +18,9 @@ import * as prompts from './prompts/index.js';
 import {
   isOAuthConfigured,
   oauthMiddleware,
-  protectedResourceMetadataHandler,
+  registerOAuthRoutes,
   PROTECTED_RESOURCE_METADATA_PATH,
-} from './oauth.js';
+} from './oauth/index.js';
 import { requestContextMiddleware } from './middleware/request-context.js';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
@@ -32,14 +32,34 @@ for (const key of required) {
 }
 
 if (isOAuthConfigured()) {
-  const missing = ['OAUTH_AUDIENCE', 'OAUTH_ALLOWED_EMAIL_DOMAINS'].filter((k) => !process.env[k]);
-  if (missing.length > 0) {
-    console.error(`OAUTH_ISSUER is set but ${missing.join(' + ')} missing. All three are required when OAuth is enabled.`);
+  const missingOauth = [
+    'OAUTH_CLIENT_ID',
+    'OAUTH_CLIENT_SECRET',
+    'OAUTH_ALLOWED_EMAIL_DOMAINS',
+    'PUBLIC_BASE_URL',
+  ].filter((k) => !process.env[k]);
+  if (missingOauth.length > 0) {
+    console.error(
+      `OAUTH_ISSUER is set but the following are missing: ${missingOauth.join(' + ')}. All are required when OAuth is enabled.`,
+    );
     process.exit(1);
   }
-  console.log(`OAuth enabled — issuer: ${process.env.OAUTH_ISSUER}, audience: ${process.env.OAUTH_AUDIENCE}, allowed email domains: ${process.env.OAUTH_ALLOWED_EMAIL_DOMAINS}`);
+  const missingCwCreds = ['CW_COMPANY_ID', 'CW_PUBLIC_KEY', 'CW_PRIVATE_KEY'].filter(
+    (k) => !process.env[k],
+  );
+  if (missingCwCreds.length > 0) {
+    console.error(
+      `OAuth is enabled but server-side CW credentials are missing: ${missingCwCreds.join(' + ')}. All three are required when OAuth is on.`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `OAuth enabled — issuer: ${process.env.OAUTH_ISSUER}, public base URL: ${process.env.PUBLIC_BASE_URL}, allowed email domains: ${process.env.OAUTH_ALLOWED_EMAIL_DOMAINS}`,
+  );
 } else {
-  console.warn('OAuth NOT configured — /mcp accepts URL-param credentials. Set OAUTH_ISSUER + OAUTH_AUDIENCE + OAUTH_ALLOWED_EMAIL_DOMAINS to enable bearer-token auth.');
+  console.warn(
+    'OAuth NOT configured — /mcp accepts URL-param credentials. Set OAUTH_ISSUER + OAUTH_CLIENT_ID + OAUTH_CLIENT_SECRET + OAUTH_ALLOWED_EMAIL_DOMAINS + PUBLIC_BASE_URL to enable bearer-token auth.',
+  );
 }
 
 function createServer(ctx: CwRequestContext): McpServer {
@@ -62,7 +82,7 @@ function createServer(ctx: CwRequestContext): McpServer {
   return server;
 }
 
-function extractCredentials(req: Request): CwRequestContext | null {
+function extractCredentialsFromQuery(req: Request): CwRequestContext | null {
   const companyId = req.query.companyId as string | undefined;
   const publicKey = req.query.publicKey as string | undefined;
   const privateKey = req.query.privateKey as string | undefined;
@@ -74,10 +94,22 @@ function extractCredentials(req: Request): CwRequestContext | null {
   return { companyId, publicKey, privateKey };
 }
 
+function getServerSideCredentials(): CwRequestContext {
+  return {
+    companyId: process.env.CW_COMPANY_ID!,
+    publicKey: process.env.CW_PUBLIC_KEY!,
+    privateKey: process.env.CW_PRIVATE_KEY!,
+  };
+}
+
 async function handleMcpRequest(req: Request, res: Response, body?: unknown): Promise<void> {
-  const ctx = extractCredentials(req);
+  const ctx = isOAuthConfigured()
+    ? getServerSideCredentials()
+    : extractCredentialsFromQuery(req);
   if (!ctx) {
-    res.status(401).json({ error: 'Missing required query parameters: companyId, publicKey, privateKey' });
+    res
+      .status(401)
+      .json({ error: 'Missing required query parameters: companyId, publicKey, privateKey' });
     return;
   }
   const server = createServer(ctx);
@@ -94,9 +126,10 @@ async function handleMcpRequest(req: Request, res: Response, body?: unknown): Pr
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(requestContextMiddleware);
 
-app.get(PROTECTED_RESOURCE_METADATA_PATH, protectedResourceMetadataHandler);
+registerOAuthRoutes(app);
 
 app.post('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
 app.get('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res));
@@ -107,6 +140,6 @@ app.listen(port, () => {
   console.log(`CW Manage MCP server listening on http://localhost:${port}/mcp`);
   console.log(`Base URL: ${process.env.CW_BASE_URL}/${process.env.CW_CODEBASE}/apis/3.0`);
   if (isOAuthConfigured()) {
-    console.log(`OAuth metadata: http://localhost:${port}${PROTECTED_RESOURCE_METADATA_PATH}`);
+    console.log(`OAuth metadata: ${process.env.PUBLIC_BASE_URL}${PROTECTED_RESOURCE_METADATA_PATH}`);
   }
 });

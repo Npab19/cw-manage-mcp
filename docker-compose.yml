@@ -8,6 +8,17 @@ services:
       - CW_BASE_URL=${CW_BASE_URL}
       - CW_CODEBASE=${CW_CODEBASE}
       - PORT=3000
+      - OAUTH_ISSUER=${OAUTH_ISSUER}
+      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}
+      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
+      - OAUTH_ALLOWED_EMAIL_DOMAINS=${OAUTH_ALLOWED_EMAIL_DOMAINS}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      - OAUTH_KEY_FILE=/data/oauth-keys.json
+      - CW_COMPANY_ID=${CW_COMPANY_ID}
+      - CW_PUBLIC_KEY=${CW_PUBLIC_KEY}
+      - CW_PRIVATE_KEY=${CW_PRIVATE_KEY}
+    volumes:
+      - oauth-keys:/data
     restart: unless-stopped
 
   cloudflared:
@@ -16,3 +27,6 @@ services:
     depends_on:
       - cw-manage-mcp
     restart: unless-stopped
+
+volumes:
+  oauth-keys:
