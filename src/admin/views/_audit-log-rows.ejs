@@ -1,0 +1,10 @@
+<% for (const r of rows) { %>
+  <tr data-ts="<%= r.ts.toISOString() %>">
+    <td><%= r.ts.toISOString() %></td>
+    <td><%= r.auth_email || '' %></td>
+    <td><code><%= r.tool || '' %></code></td>
+    <td><%= r.status %><%= r.error_message ? ' (' + r.error_message + ')' : '' %></td>
+    <td><%= r.duration_ms != null ? r.duration_ms + 'ms' : '' %></td>
+    <td class="muted" style="font-family: ui-monospace, monospace; font-size: 12px;"><%= r.request_id || '' %></td>
+  </tr>
+<% } %>
