@@ -13,6 +13,12 @@ import {
   setupPostHandler,
   testCwConnectionHandler,
 } from './setup.js';
+import {
+  settingsGetHandler,
+  updateCwConnectionHandler,
+  updateOauthProviderHandler,
+  testCwConnectionAuthedHandler,
+} from './settings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -44,6 +50,11 @@ export function buildAdminRouter(): Router {
   router.get('/', (req, res) => {
     res.render('index', { title: 'Dashboard', admin: req.admin });
   });
+
+  router.get('/settings', settingsGetHandler);
+  router.post('/settings/cw-connection', updateCwConnectionHandler);
+  router.post('/settings/cw-connection/test', testCwConnectionAuthedHandler);
+  router.post('/settings/oauth-provider', updateOauthProviderHandler);
 
   return router;
 }

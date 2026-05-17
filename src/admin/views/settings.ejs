@@ -1,0 +1,92 @@
+<% if (flash === 'cw-saved') { %>
+  <div class="flash success">CW connection updated.</div>
+<% } else if (flash === 'oauth-saved') { %>
+  <div class="flash success">OAuth provider updated.</div>
+<% } else if (flash && flash.startsWith('missing:')) { %>
+  <div class="flash error">Missing required fields: <%= flash.slice('missing:'.length) %></div>
+<% } %>
+
+<section class="card">
+  <h1>OAuth provider</h1>
+  <% if (oauth) { %>
+    <p class="muted">Current configuration. Leave the client secret blank to keep the existing value.</p>
+  <% } else { %>
+    <p class="muted">Not configured yet — fill all fields below.</p>
+  <% } %>
+  <form method="post" action="/admin/settings/oauth-provider">
+    <label>IdP issuer URL
+      <input type="url" name="oauthIssuer" required value="<%= oauth ? oauth.issuer : '' %>" />
+    </label>
+    <label>OAuth client ID
+      <input type="text" name="oauthClientId" required value="<%= oauth ? oauth.clientId : '' %>" />
+    </label>
+    <label>OAuth client secret
+      <input type="password" name="oauthClientSecret" placeholder="<%= oauth ? maskSecret(oauth.clientSecret) + ' (leave blank to keep)' : '' %>" />
+    </label>
+    <label>Allowed email domains (comma-separated)
+      <input type="text" name="allowedEmailDomains" required value="<%= oauth ? oauth.allowedEmailDomains.join(', ') : '' %>" />
+    </label>
+    <label>Public base URL of this server
+      <input type="url" name="publicBaseUrl" required value="<%= oauth ? oauth.publicBaseUrl : '' %>" />
+    </label>
+    <p style="margin-top: 16px;">
+      <input type="submit" value="Save OAuth provider" />
+    </p>
+  </form>
+</section>
+
+<section class="card">
+  <h1>ConnectWise connection</h1>
+  <% if (cw) { %>
+    <p class="muted">Current configuration. Leave the private key blank to keep the existing value.</p>
+  <% } else { %>
+    <p class="muted">Not configured yet — fill all fields below.</p>
+  <% } %>
+  <form method="post" action="/admin/settings/cw-connection">
+    <label>CW base URL
+      <select onchange="document.getElementsByName('cwBaseUrl')[0].value = this.value === 'custom' ? document.getElementsByName('cwBaseUrl')[0].value : this.value;">
+        <option value="">— pick a region —</option>
+        <% for (const [key, url] of Object.entries(regionOptions)) { %>
+          <option value="<%= url %>" <%= cw && cw.baseUrl === url ? 'selected' : '' %>><%= key.toUpperCase() %> (<%= url %>)</option>
+        <% } %>
+        <option value="custom">Custom (on-premise)</option>
+      </select>
+    </label>
+    <input type="url" name="cwBaseUrl" required value="<%= cw ? cw.baseUrl : '' %>" />
+
+    <label>CW codebase
+      <select name="cwCodebase" required>
+        <% for (const cb of codebaseOptions) { %>
+          <option value="<%= cb %>" <%= (cw && cw.codebase === cb) ? 'selected' : '' %>><%= cb %></option>
+        <% } %>
+      </select>
+    </label>
+    <label>CW client ID
+      <input type="text" name="cwClientId" required value="<%= cw ? cw.clientId : '' %>" />
+    </label>
+    <label>CW company ID
+      <input type="text" name="cwCompanyId" required value="<%= cw ? cw.companyId : '' %>" />
+    </label>
+    <label>CW public key
+      <input type="text" name="cwPublicKey" required value="<%= cw ? cw.publicKey : '' %>" />
+    </label>
+    <label>CW private key
+      <input type="password" name="cwPrivateKey" placeholder="<%= cw ? maskSecret(cw.privateKey) + ' (leave blank to keep)' : '' %>" />
+    </label>
+
+    <p style="margin-top: 16px;">
+      <button type="button" class="button secondary"
+        hx-post="/admin/settings/cw-connection/test"
+        hx-include="[name='cwBaseUrl'],[name='cwCodebase'],[name='cwClientId'],[name='cwCompanyId'],[name='cwPublicKey'],[name='cwPrivateKey']"
+        hx-target="#cw-test-result"
+        hx-swap="innerHTML">
+        Test connection
+      </button>
+      <span id="cw-test-result" class="muted" style="margin-left: 12px;"></span>
+    </p>
+
+    <p style="margin-top: 16px;">
+      <input type="submit" value="Save CW connection" />
+    </p>
+  </form>
+</section>
