@@ -12,7 +12,7 @@ const withBoardId: Schema = { id: idSchema('Board ID'), ...pag };
 const byId: Schema = { id: idSchema('Ticket ID'), fields: z.string().optional().describe('Fields to return') };
 
 export function register(server: McpServer, ctx: CwRequestContext): void {
-  addTool(server, 'get_service_tickets', 'List service tickets (incidents) from ConnectWise Manage.', listSchema,
+  addTool(server, 'get_service_tickets', 'Default tool for ticket questions. Use `conditions` to scope the result set. Examples: `closedFlag=false` for open tickets, `priority/id<=2` for high-priority, `board/id=N` to scope to a board, `lastUpdated>[2024-01-01T00:00:00Z]` for recently-touched. Pass `fields="id,summary,status,..."` to project only what you need — keeps responses small and fast.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/tickets', args)));
 
   addTool(server, 'get_service_ticket_by_id', 'Retrieve a single service ticket by its ID.', byId,

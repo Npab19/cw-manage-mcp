@@ -14,7 +14,7 @@ const byContactId: Schema = { id: idSchema('Contact ID'), fields: z.string().opt
 const byConfigId: Schema = { id: idSchema('Configuration ID'), fields: z.string().optional().describe('Fields to return') };
 
 export function register(server: McpServer, ctx: CwRequestContext): void {
-  addTool(server, 'get_companies', 'List companies in ConnectWise Manage.', listSchema,
+  addTool(server, 'get_companies', 'Default tool for company-lookup questions. Always pass `conditions` to filter — this can return thousands of records. Pass `fields="id,name,..."` to project only what you need.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/company/companies', args)));
 
   addTool(server, 'get_company_by_id', 'Retrieve a single company by its ID.', byCompanyId,
@@ -26,7 +26,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
   addTool(server, 'get_company_notes', 'List notes on a specific company.', withCompanyId,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/company/companies/${args.id}/notes`, args)));
 
-  addTool(server, 'get_contacts', 'List contacts in ConnectWise Manage.', listSchema,
+  addTool(server, 'get_contacts', 'Default tool for contact-lookup questions. Always pass `conditions` to filter — this can return thousands of records. Pass `fields="id,firstName,lastName,..."` to project only what you need.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/company/contacts', args)));
 
   addTool(server, 'get_contact_by_id', 'Retrieve a single contact by their ID.', byContactId,
@@ -38,7 +38,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
   addTool(server, 'get_contact_notes', 'List notes on a specific contact.', withContactId,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/company/contacts/${args.id}/notes`, args)));
 
-  addTool(server, 'get_company_configurations', 'List company configurations (managed devices, assets).', listSchema,
+  addTool(server, 'get_company_configurations', 'List company configurations (managed devices, assets). Always pass `conditions` to filter — this can return thousands of records. Pass `fields` to project only what you need.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/company/configurations', args)));
 
   addTool(server, 'get_company_configuration_by_id', 'Retrieve a single company configuration by its ID.', byConfigId,

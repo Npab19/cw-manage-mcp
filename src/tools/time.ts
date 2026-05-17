@@ -11,7 +11,7 @@ const byEntryId: Schema = { id: idSchema('Time entry ID'), fields: z.string().op
 const bySheetId: Schema = { id: idSchema('Timesheet ID'), fields: z.string().optional().describe('Fields to return') };
 
 export function register(server: McpServer, ctx: CwRequestContext): void {
-  addTool(server, 'get_time_entries', 'List time entries across all tickets and projects. Filter by member, date range, ticket, etc.', listSchema,
+  addTool(server, 'get_time_entries', 'Default tool for time-entry questions. Always pass `conditions` to filter (member, date range, ticket) — this can return thousands of records. Example: `member/identifier=\'jsmith\' and timeStart>[2024-01-01T00:00:00Z]`. Pass `fields` to project only what you need.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/time/entries', args)));
 
   addTool(server, 'get_time_entry_by_id', 'Retrieve a single time entry by its ID.', byEntryId,
