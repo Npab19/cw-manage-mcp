@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { escapeConditionLiteral } from '../tools/helper.js';
 
 function addPrompt(
   server: McpServer,
@@ -53,22 +54,24 @@ Compile findings into a concise standup format:
   addPrompt(server, 'client_review',
     'Generate a client health review: open tickets, agreements, and recent activity.',
     { companyIdentifier: z.string().describe('Company name or ID to review') },
-    (args) => ({
+    (args) => {
+      const safeCompany = escapeConditionLiteral(args.companyIdentifier);
+      return ({
       messages: [{
         role: 'user' as const,
         content: {
           type: 'text' as const,
           text: `You are a ConnectWise Manage assistant preparing a client health review for: "${args.companyIdentifier}". Perform these steps:
 
-1. **Company Lookup**: Call get_companies with conditions "name contains '${args.companyIdentifier}'" (or "id=${args.companyIdentifier}" if numeric). Note the company ID for subsequent calls.
+1. **Company Lookup**: Call get_companies with conditions "name contains '${safeCompany}'" (or "id=${args.companyIdentifier}" if numeric). Note the company ID for subsequent calls.
 
-2. **Open Tickets**: Call get_service_tickets with conditions "company/name contains '${args.companyIdentifier}' AND closedFlag=false" ordered by "priority/id asc". Summarize by priority and status.
+2. **Open Tickets**: Call get_service_tickets with conditions "company/name contains '${safeCompany}' AND closedFlag=false" ordered by "priority/id asc". Summarize by priority and status.
 
-3. **Agreements**: Call get_agreements with conditions "company/name contains '${args.companyIdentifier}'". For each active agreement, note the type, billing cycle, and end date. Use get_agreement_profitability for key agreements.
+3. **Agreements**: Call get_agreements with conditions "company/name contains '${safeCompany}'". For each active agreement, note the type, billing cycle, and end date. Use get_agreement_profitability for key agreements.
 
-4. **Recent Activity**: Call get_time_entries with conditions "company/name contains '${args.companyIdentifier}'" for the last 30 days. Summarize total hours and common work types.
+4. **Recent Activity**: Call get_time_entries with conditions "company/name contains '${safeCompany}'" for the last 30 days. Summarize total hours and common work types.
 
-5. **Contacts**: Call get_contacts with conditions "company/name contains '${args.companyIdentifier}'" to list key contacts.
+5. **Contacts**: Call get_contacts with conditions "company/name contains '${safeCompany}'" to list key contacts.
 
 Compile into a professional client review:
 - **Company Overview**: name, key contacts, relationship summary
@@ -78,24 +81,27 @@ Compile into a professional client review:
 - **Recommendations**: action items for account management`
         }
       }]
-    }));
+    });
+    });
 
   // ── tech_productivity ───────────────────────────────────────────────
   addPrompt(server, 'tech_productivity',
     'Generate a technician productivity report: utilization, ticket throughput, and resolution time.',
     { memberIdentifier: z.string().describe('Member identifier (e.g. "jsmith")') },
-    (args) => ({
+    (args) => {
+      const safeMember = escapeConditionLiteral(args.memberIdentifier);
+      return {
       messages: [{
         role: 'user' as const,
         content: {
           type: 'text' as const,
           text: `You are a ConnectWise Manage assistant analyzing technician productivity for member: "${args.memberIdentifier}". Perform these steps:
 
-1. **Member Profile**: Call get_members with conditions "identifier='${args.memberIdentifier}'" to get the member's details and role.
+1. **Member Profile**: Call get_members with conditions "identifier='${safeMember}'" to get the member's details and role.
 
 2. **Utilization (Last 30 Days)**: Call get_member_utilization with memberIdentifier="${args.memberIdentifier}", startDate set to 30 days ago (YYYY-MM-DD), and endDate set to today. This gives logged hours vs scheduled hours.
 
-3. **Ticket Throughput**: Call get_service_tickets with childConditions "resources/member/identifier='${args.memberIdentifier}'" and conditions for the last 30 days. Separate into open vs closed to calculate throughput.
+3. **Ticket Throughput**: Call get_service_tickets with childConditions "resources/member/identifier='${safeMember}'" and conditions for the last 30 days. Separate into open vs closed to calculate throughput.
 
 4. **Resolution Time**: From closed tickets, analyze dateEntered vs closedDate to estimate average resolution time by priority.
 
@@ -109,7 +115,8 @@ Compile into a manager-ready productivity report:
 - **Recommendations**: areas for improvement or recognition`
         }
       }]
-    }));
+    };
+    });
 
   // ── escalation_check ────────────────────────────────────────────────
   addPromptNoArgs(server, 'escalation_check',
@@ -151,14 +158,16 @@ For each item, include the ticket ID, summary, company name, priority, age, and 
   addPrompt(server, 'tech_skills_report',
     'Generate a comprehensive skills assessment for a technician with training recommendations.',
     { memberIdentifier: z.string().describe('Member identifier (e.g. "jsmith")') },
-    (args) => ({
+    (args) => {
+      const safeMember = escapeConditionLiteral(args.memberIdentifier);
+      return {
       messages: [{
         role: 'user' as const,
         content: {
           type: 'text' as const,
           text: `You are a ConnectWise Manage assistant generating a skills assessment for member: "${args.memberIdentifier}". Perform these steps:
 
-1. **Member Profile**: Call get_members with conditions "identifier='${args.memberIdentifier}'" to get the member's ID, name, role, and department.
+1. **Member Profile**: Call get_members with conditions "identifier='${safeMember}'" to get the member's ID, name, role, and department.
 
 2. **Skills Inventory**: Using the member ID from step 1, call get_tech_skills_report with that ID and recentDays=90 for a 90-day activity window. This returns skills, recent tickets, and time entries.
 
@@ -182,7 +191,8 @@ Compile into a skills assessment report:
 - **Strengths**: areas where the tech demonstrates deep expertise`
         }
       }]
-    }));
+    };
+    });
 
   // ── recurring_issue_analysis ─────────────────────────────────────────
   addPrompt(server, 'recurring_issue_analysis',
@@ -320,7 +330,9 @@ Compile into a weekly manager report:
   addPrompt(server, 'common_issues_by_client',
     'Analyze a client\'s most common ticket patterns and recommend preventive measures.',
     { companyIdentifier: z.string().describe('Company name to analyze') },
-    (args) => ({
+    (args) => {
+      const safeCompany = escapeConditionLiteral(args.companyIdentifier);
+      return {
       messages: [{
         role: 'user' as const,
         content: {
@@ -331,9 +343,9 @@ Compile into a weekly manager report:
 
 2. **Compare Against Baseline**: Call get_recurring_issues_report with days=90 (all boards) to get the overall issue distribution. Compare whether this client has higher-than-average rates for any issue type.
 
-3. **Open Tickets Review**: Call get_service_tickets with conditions "company/name contains '${args.companyIdentifier}' AND closedFlag=false" to see what's currently unresolved.
+3. **Open Tickets Review**: Call get_service_tickets with conditions "company/name contains '${safeCompany}' AND closedFlag=false" to see what's currently unresolved.
 
-4. **Agreement Context**: Call get_agreements with conditions "company/name contains '${args.companyIdentifier}'" to understand the service agreement. Is the ticket volume appropriate for their agreement level?
+4. **Agreement Context**: Call get_agreements with conditions "company/name contains '${safeCompany}'" to understand the service agreement. Is the ticket volume appropriate for their agreement level?
 
 Compile into a client issue analysis:
 - **Client Overview**: company name, agreement type, total tickets in period
@@ -345,7 +357,8 @@ Compile into a client issue analysis:
 - **Risk Assessment**: is this client at risk of dissatisfaction based on volume and patterns?`
         }
       }]
-    }));
+    };
+    });
 
   // ── sla_compliance_review ───────────────────────────────────────────
   addPromptNoArgs(server, 'sla_compliance_review',

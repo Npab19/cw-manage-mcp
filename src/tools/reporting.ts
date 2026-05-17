@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext, PaginationParams } from '../types.js';
-import { addTool } from './helper.js';
+import { addTool, escapeConditionLiteral } from './helper.js';
 
 async function safeFetch<T = unknown>(
   ctx: CwRequestContext,
@@ -70,8 +70,9 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     },
     (args) => handleToolCall(ctx, async (c) => {
       const memberId = args.memberIdentifier;
-      const timeConditions = `member/identifier='${memberId}' AND timeStart>=[${args.startDate}T00:00:00Z] AND timeEnd<=[${args.endDate}T23:59:59Z]`;
-      const schedConditions = `member/identifier='${memberId}' AND dateStart>=[${args.startDate}T00:00:00Z] AND dateEnd<=[${args.endDate}T23:59:59Z]`;
+      const safeMemberId = escapeConditionLiteral(memberId);
+      const timeConditions = `member/identifier='${safeMemberId}' AND timeStart>=[${args.startDate}T00:00:00Z] AND timeEnd<=[${args.endDate}T23:59:59Z]`;
+      const schedConditions = `member/identifier='${safeMemberId}' AND dateStart>=[${args.startDate}T00:00:00Z] AND dateEnd<=[${args.endDate}T23:59:59Z]`;
 
       const [timeEntries, schedEntries, calendars] = await Promise.all([
         safeFetch<unknown[]>(c, '/time/entries', { conditions: timeConditions, pageSize: 1000 }),
@@ -328,8 +329,9 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
       cutoff.setDate(cutoff.getDate() - days);
       const cutoffDate = cutoff.toISOString().split('T')[0];
 
+      const safeCompany = escapeConditionLiteral(args.companyIdentifier);
       const tickets = await safeFetch<any[]>(c, '/service/tickets', {
-        conditions: `company/name contains '${args.companyIdentifier}' AND dateEntered>=[${cutoffDate}T00:00:00Z]`,
+        conditions: `company/name contains '${safeCompany}' AND dateEntered>=[${cutoffDate}T00:00:00Z]`,
         fields: 'id,summary,type,subType,board,status,priority,dateEntered,closedDate,closedFlag',
         pageSize: 1000,
         orderBy: 'dateEntered desc',

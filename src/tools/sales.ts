@@ -2,22 +2,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
-import { addTool, Schema } from './helper.js';
+import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
 
-const pag: Schema = {
-  conditions: z.string().optional().describe('Filter expression'),
-  childConditions: z.string().optional().describe('Filter on child/array fields'),
-  customFieldConditions: z.string().optional().describe('Filter on custom fields'),
-  orderBy: z.string().optional().describe('Sort expression, e.g. "expectedCloseDate asc"'),
-  fields: z.string().optional().describe('Comma-separated field names to return'),
-  page: z.number().int().min(1).optional().describe('Page number (starts at 1)'),
-  pageSize: z.number().int().min(1).max(1000).optional().describe('Records per page (max 1000)'),
-  pageId: z.number().int().optional().describe('Forward-only paging: start after this record ID'),
-};
+const pag: Schema = buildPaginationSchema('opportunity');
 
 const listSchema: Schema = { ...pag };
-const withOpportunityId: Schema = { id: z.number().int().describe('Opportunity ID'), ...pag };
-const byOpportunityId: Schema = { id: z.number().int().describe('Opportunity ID'), fields: z.string().optional().describe('Fields to return') };
+const withOpportunityId: Schema = { id: idSchema('Opportunity ID'), ...pag };
+const byOpportunityId: Schema = { id: idSchema('Opportunity ID'), fields: z.string().optional().describe('Fields to return') };
 
 export function register(server: McpServer, ctx: CwRequestContext): void {
   addTool(server, 'get_opportunities', 'List sales opportunities in ConnectWise Manage.', listSchema,
