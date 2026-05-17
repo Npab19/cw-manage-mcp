@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, { Request, Response } from 'express';
+import cookieParser from 'cookie-parser';
 import { CwRequestContext } from './types.js';
 
 import * as serviceTools from './tools/service.js';
@@ -30,6 +31,7 @@ import { requestContextMiddleware } from './middleware/request-context.js';
 import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
 import { getCwConnection } from './config.js';
+import { buildAdminRouter, ADMIN_VIEWS_DIR } from './admin/router.js';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
 for (const key of required) {
@@ -143,7 +145,13 @@ async function handleMcpRequest(req: Request, res: Response, body?: unknown): Pr
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 app.use(requestContextMiddleware);
+
+app.set('view engine', 'ejs');
+app.set('views', ADMIN_VIEWS_DIR);
+
+app.use('/admin', buildAdminRouter());
 
 app.get('/healthz', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });

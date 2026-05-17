@@ -1,0 +1,40 @@
+import { Router } from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import express from 'express';
+import {
+  adminAuthMiddleware,
+  loginHandler,
+  callbackHandler,
+  logoutHandler,
+} from './auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const ADMIN_DIR = path.dirname(__filename);
+
+export const ADMIN_VIEWS_DIR = path.join(ADMIN_DIR, 'views');
+export const ADMIN_STATIC_DIR = path.join(ADMIN_DIR, 'static');
+
+export function buildAdminRouter(): Router {
+  const router = Router();
+
+  router.use('/static', express.static(ADMIN_STATIC_DIR, { maxAge: '1h' }));
+
+  router.get('/login', (req, res, next) => {
+    if (typeof req.query.returnTo === 'string') {
+      loginHandler(req, res, next);
+    } else {
+      res.render('login', { title: 'Sign in', returnTo: '/admin' });
+    }
+  });
+  router.get('/auth/callback', callbackHandler);
+  router.get('/logout', logoutHandler);
+
+  router.use(adminAuthMiddleware);
+
+  router.get('/', (req, res) => {
+    res.render('index', { title: 'Dashboard', admin: req.admin });
+  });
+
+  return router;
+}

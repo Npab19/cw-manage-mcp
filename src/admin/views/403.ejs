@@ -1,0 +1,7 @@
+<% layout = 'layout' %>
+<section class="card error">
+  <h1>403 — not authorized</h1>
+  <p>The signed-in email <strong><%= email %></strong> isn't on the admin allow-list.</p>
+  <p>Talk to whoever owns this deployment to be added to <code>ADMIN_EMAILS</code> (env) or the dashboard's admin list.</p>
+  <p><a href="/admin/logout">Sign out and try a different account</a></p>
+</section>

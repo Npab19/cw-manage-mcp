@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= title %> — CW MCP Admin</title>
+  <link rel="stylesheet" href="/admin/static/style.css" />
+  <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header class="admin-header">
+    <div class="brand">CW MCP <span class="brand-sub">Admin</span></div>
+    <% if (typeof admin !== 'undefined' && admin) { %>
+      <nav>
+        <a href="/admin">Home</a>
+        <a href="/admin/settings">Settings</a>
+        <a href="/admin/audit-log">Audit log</a>
+        <span class="who"><%= admin.email %></span>
+        <a href="/admin/logout" class="logout">Sign out</a>
+      </nav>
+    <% } %>
+  </header>
+  <main class="admin-main">
+    <%- body %>
+  </main>
+</body>
+</html>
