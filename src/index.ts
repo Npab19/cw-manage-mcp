@@ -34,6 +34,7 @@ import { pingDb } from './db.js';
 import { getCwConnection } from './config.js';
 import { buildAdminRouter, ADMIN_VIEWS_DIR } from './admin/router.js';
 import { generateBootstrapCode } from './admin/auth.js';
+import { printBootstrapBanner } from './admin/setup.js';
 import { getSql } from './db.js';
 // @ts-expect-error -- express-ejs-layouts ships untyped, but it's a one-liner middleware.
 import expressLayouts from 'express-ejs-layouts';
@@ -193,11 +194,17 @@ app.delete('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => 
 
 const port = parseInt(process.env.PORT ?? '3000', 10);
 
+interface BootstrapState {
+  required: boolean;
+  code: string | null;
+}
+
 async function start(): Promise<void> {
+  let bootstrap: BootstrapState = { required: false, code: null };
   if (process.env.DATABASE_URL) {
     await pingDb();
     await runMigrations();
-    await emitBootstrapIfNeeded();
+    bootstrap = await initSetupState();
   } else {
     console.warn('DATABASE_URL not set — running without the dashboard DB (legacy mode).');
   }
@@ -207,19 +214,21 @@ async function start(): Promise<void> {
     if (isOAuthConfigured()) {
       console.log(`OAuth metadata: ${process.env.PUBLIC_BASE_URL}${PROTECTED_RESOURCE_METADATA_PATH}`);
     }
+    if (bootstrap.required && bootstrap.code) {
+      const host = process.env.PUBLIC_BASE_URL ?? `http://localhost:${port}`;
+      printBootstrapBanner(host, bootstrap.code);
+    }
   });
 }
 
-async function emitBootstrapIfNeeded(): Promise<void> {
+async function initSetupState(): Promise<BootstrapState> {
   const sql = getSql();
   const rows = await sql<{ setup_completed_at: Date | null }[]>`
     SELECT setup_completed_at FROM setup_state WHERE id = 1
   `;
-  if (rows[0]?.setup_completed_at) return;
+  if (rows[0]?.setup_completed_at) return { required: false, code: null };
   const code = generateBootstrapCode();
-  const host = process.env.PUBLIC_BASE_URL ?? `http://localhost:${process.env.PORT ?? '3000'}`;
-  console.log(`[BOOTSTRAP] Setup required. Visit: ${host}/admin/setup?code=${code}`);
-  console.log('[BOOTSTRAP] This URL is valid for one setup attempt. The code rotates if the container restarts before setup completes.');
+  return { required: true, code };
 }
 
 start().catch((err) => {

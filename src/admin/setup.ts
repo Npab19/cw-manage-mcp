@@ -216,3 +216,24 @@ function escapeHtml(s: string): string {
 export function invalidateSetupCache(): void {
   setupCompleteCache = null;
 }
+
+export function printBootstrapBanner(host: string, code: string): void {
+  const border = '='.repeat(70);
+  // Direct console.log: this is an operator instruction, not a log line.
+  console.log('');
+  console.log('');
+  console.log(border);
+  console.log('');
+  console.log('  SETUP REQUIRED');
+  console.log('');
+  console.log('  Visit this URL to complete first-time setup:');
+  console.log('');
+  console.log(`    ${host}/admin/setup?code=${code}`);
+  console.log('');
+  console.log('  This code is valid for one setup attempt and rotates if the');
+  console.log('  container restarts before setup completes.');
+  console.log('');
+  console.log(border);
+  console.log('');
+  console.log('');
+}
