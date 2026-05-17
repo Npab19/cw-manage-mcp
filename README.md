@@ -360,38 +360,30 @@ If any credential query parameter is missing, the server returns HTTP `401` befo
 
 ### OAuth resource server
 
-Set `OAUTH_ISSUER` and `OAUTH_AUDIENCE` to enable bearer-token auth on all `/mcp` routes. The server then:
+Goal: **log in with your company email**. Set three env vars and any user in your IdP whose email is at one of the allowed domains can authenticate. No per-user provisioning, no scope wiring.
 
-- Validates every `/mcp` request's `Authorization: Bearer <jwt>` header against the IdP's JWKS using [`jose`](https://github.com/panva/jose).
-- Returns `401` with `WWW-Authenticate: Bearer resource_metadata="<discovery-url>", error="invalid_token"` per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and [RFC 6750](https://datatracker.ietf.org/doc/html/rfc6750) when the bearer is missing, invalid, expired, or has the wrong issuer/audience.
-- Serves [Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728) at `GET /.well-known/oauth-protected-resource` so MCP clients (Claude.ai, MCP Inspector, etc.) can auto-discover the authorization server.
-- Caches the IdP's JWKS for 10 minutes (configurable via `Cache-Control` on the JWKS endpoint).
+When OAuth is configured, every `/mcp` request must carry an `Authorization: Bearer <jwt>` header. The server:
+
+1. Validates the JWT signature against the IdP's JWKS using [`jose`](https://github.com/panva/jose).
+2. Confirms the token's `iss` matches `OAUTH_ISSUER` and `aud` matches `OAUTH_AUDIENCE`.
+3. Reads the `email` claim (falls back to `preferred_username` for Entra ID) and confirms its domain is in `OAUTH_ALLOWED_EMAIL_DOMAINS`.
+
+Failures return `401` with a `WWW-Authenticate` header pointing at `/.well-known/oauth-protected-resource` per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728), or `403` when the token is valid but the user's email isn't in the allowed domain list. JWKS is cached for 10 minutes.
 
 #### Example — Microsoft Entra ID
 
-In your Azure tenant, [register an application](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app), set its **Application ID URI** (e.g. `api://cw-manage-mcp`), and expose a scope (e.g. `mcp.access`).
+In your Azure tenant, [register an application](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app) and set its **Application ID URI** (e.g. `api://cw-manage-mcp`). No scope or app-role configuration needed — the email check is the gate.
 
 ```bash
 # .env
 OAUTH_ISSUER=https://login.microsoftonline.com/<your-tenant-id>/v2.0
 OAUTH_AUDIENCE=api://cw-manage-mcp
-OAUTH_REQUIRED_SCOPE=mcp.access
+OAUTH_ALLOWED_EMAIL_DOMAINS=yourcompany.com
 ```
 
-Then have your MCP client authenticate via the standard OAuth 2.1 flow with that Entra app — Claude.ai and MCP Inspector both auto-discover from the protected resource metadata endpoint.
+Then have your MCP client (Claude.ai, MCP Inspector) authenticate via the standard OAuth 2.1 flow with that Entra app — clients auto-discover the authorization server from `/.well-known/oauth-protected-resource`.
 
-*Note:* if verification fails for valid-looking Entra tokens, the `aud` claim may be the **Application ID URI**, not the client ID. Use the Application ID URI as `OAUTH_AUDIENCE`.
-
-#### Example — Auth0
-
-Create an [API](https://auth0.com/docs/get-started/apis) in your Auth0 tenant with identifier (audience) `https://cw-manage-mcp.example.com`, and create or assign a Machine-to-Machine application that's authorized for that API.
-
-```bash
-# .env
-OAUTH_ISSUER=https://<your-tenant>.auth0.com/
-OAUTH_AUDIENCE=https://cw-manage-mcp.example.com
-OAUTH_REQUIRED_SCOPE=mcp.access
-```
+*Note:* if verification fails for valid-looking Entra tokens, the `aud` claim is the **Application ID URI**, not the client ID. Use the Application ID URI as `OAUTH_AUDIENCE`.
 
 #### Environment variables
 
@@ -399,8 +391,7 @@ OAUTH_REQUIRED_SCOPE=mcp.access
 |---|---|---|
 | `OAUTH_ISSUER` | When enabling OAuth | IdP issuer URL (no trailing slash). |
 | `OAUTH_AUDIENCE` | When enabling OAuth | Expected `aud` claim — this server's identifier in the IdP. |
-| `OAUTH_JWKS_URI` | No | Explicit JWKS URI override. Derived from `${OAUTH_ISSUER}/.well-known/openid-configuration` if unset. |
-| `OAUTH_REQUIRED_SCOPE` | No | If set, every token must include this scope. |
+| `OAUTH_ALLOWED_EMAIL_DOMAINS` | When enabling OAuth | Comma-separated list of email domains allowed to authenticate (e.g. `acme.com,partner.com`). Case-insensitive. |
 
 #### Error responses (both modes)
 

@@ -32,13 +32,14 @@ for (const key of required) {
 }
 
 if (isOAuthConfigured()) {
-  if (!process.env.OAUTH_AUDIENCE) {
-    console.error('OAUTH_ISSUER is set but OAUTH_AUDIENCE is missing. Both are required when OAuth is enabled.');
+  const missing = ['OAUTH_AUDIENCE', 'OAUTH_ALLOWED_EMAIL_DOMAINS'].filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(`OAUTH_ISSUER is set but ${missing.join(' + ')} missing. All three are required when OAuth is enabled.`);
     process.exit(1);
   }
-  console.log(`OAuth enabled — issuer: ${process.env.OAUTH_ISSUER}, audience: ${process.env.OAUTH_AUDIENCE}`);
+  console.log(`OAuth enabled — issuer: ${process.env.OAUTH_ISSUER}, audience: ${process.env.OAUTH_AUDIENCE}, allowed email domains: ${process.env.OAUTH_ALLOWED_EMAIL_DOMAINS}`);
 } else {
-  console.warn('OAuth NOT configured — /mcp accepts URL-param credentials. Set OAUTH_ISSUER + OAUTH_AUDIENCE to enable bearer-token auth.');
+  console.warn('OAuth NOT configured — /mcp accepts URL-param credentials. Set OAUTH_ISSUER + OAUTH_AUDIENCE + OAUTH_ALLOWED_EMAIL_DOMAINS to enable bearer-token auth.');
 }
 
 function createServer(ctx: CwRequestContext): McpServer {

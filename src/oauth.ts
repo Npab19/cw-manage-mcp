@@ -23,18 +23,20 @@ function getAudience(): string {
   return audience;
 }
 
-function getRequiredScope(): string | null {
-  return process.env.OAUTH_REQUIRED_SCOPE ?? null;
+function getAllowedEmailDomains(): string[] {
+  const raw = process.env.OAUTH_ALLOWED_EMAIL_DOMAINS;
+  if (!raw) {
+    throw new Error('OAUTH_ALLOWED_EMAIL_DOMAINS is not set');
+  }
+  return raw
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 let resolvedJwksUri: string | null = null;
 async function resolveJwksUri(): Promise<string> {
   if (resolvedJwksUri) return resolvedJwksUri;
-  const override = process.env.OAUTH_JWKS_URI;
-  if (override) {
-    resolvedJwksUri = override;
-    return resolvedJwksUri;
-  }
   const issuer = getIssuer();
   const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
   const resp = await fetch(discoveryUrl);
@@ -74,7 +76,7 @@ function metadataUrl(req: Parameters<RequestHandler>[0]): string {
 function sendUnauthorized(
   req: Parameters<RequestHandler>[0],
   res: Parameters<RequestHandler>[1],
-  error: 'invalid_token' | 'insufficient_scope' | 'invalid_request',
+  error: 'invalid_token' | 'invalid_request',
   description?: string,
 ): void {
   const parts = [
@@ -88,16 +90,19 @@ function sendUnauthorized(
   res.status(401).json({ error, error_description: description });
 }
 
-function extractScopes(payload: JWTPayload): string[] {
-  if (typeof payload.scope === 'string') {
-    return payload.scope.split(' ').filter(Boolean);
-  }
-  if (Array.isArray((payload as { scp?: unknown }).scp)) {
-    return ((payload as { scp: unknown[] }).scp).filter(
-      (s): s is string => typeof s === 'string',
-    );
-  }
-  return [];
+function sendForbidden(
+  res: Parameters<RequestHandler>[1],
+  description: string,
+): void {
+  res.status(403).json({ error: 'forbidden', error_description: description });
+}
+
+function extractEmail(payload: JWTPayload): string | null {
+  if (typeof payload.email === 'string') return payload.email;
+  // Entra ID sometimes uses preferred_username for the email-shaped claim.
+  const preferred = (payload as { preferred_username?: unknown }).preferred_username;
+  if (typeof preferred === 'string' && preferred.includes('@')) return preferred;
+  return null;
 }
 
 export const oauthMiddleware: RequestHandler = async (req, res, next) => {
@@ -117,33 +122,38 @@ export const oauthMiddleware: RequestHandler = async (req, res, next) => {
   }
   const token = match[1].trim();
 
+  let payload: JWTPayload;
   try {
     const jwks = await getJwks();
-    const { payload } = await jwtVerify(token, jwks, {
+    const result = await jwtVerify(token, jwks, {
       issuer: getIssuer(),
       audience: getAudience(),
     });
-
-    const scopes = extractScopes(payload);
-    const requiredScope = getRequiredScope();
-    if (requiredScope && !scopes.includes(requiredScope)) {
-      sendUnauthorized(req, res, 'insufficient_scope', `Required scope: ${requiredScope}`);
-      return;
-    }
-
-    req.oauth = {
-      sub: typeof payload.sub === 'string' ? payload.sub : null,
-      email: typeof (payload as { email?: unknown }).email === 'string'
-        ? (payload as { email: string }).email
-        : null,
-      scope: scopes,
-    };
-    return next();
+    payload = result.payload;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Token verification failed';
     sendUnauthorized(req, res, 'invalid_token', message);
     return;
   }
+
+  const email = extractEmail(payload);
+  if (!email) {
+    sendForbidden(res, 'Token has no email (or preferred_username) claim — cannot verify company-email membership');
+    return;
+  }
+  const domain = email.split('@')[1]?.toLowerCase();
+  const allowedDomains = getAllowedEmailDomains();
+  if (!domain || !allowedDomains.includes(domain)) {
+    sendForbidden(res, `Email '${email}' is not in an allowed domain (${allowedDomains.join(', ')})`);
+    return;
+  }
+
+  req.oauth = {
+    sub: typeof payload.sub === 'string' ? payload.sub : null,
+    email: email.toLowerCase(),
+    scope: [],
+  };
+  return next();
 };
 
 export const protectedResourceMetadataHandler: RequestHandler = (req, res) => {
@@ -151,11 +161,10 @@ export const protectedResourceMetadataHandler: RequestHandler = (req, res) => {
     res.status(404).json({ error: 'OAuth not configured on this server' });
     return;
   }
-  const requiredScope = getRequiredScope();
   res.json({
     resource: buildResourceUrl(req),
     authorization_servers: [getIssuer()],
-    scopes_supported: requiredScope ? [requiredScope] : [],
+    scopes_supported: [],
     bearer_methods_supported: ['header'],
     resource_documentation: `${buildResourceUrl(req)}/`,
   });
