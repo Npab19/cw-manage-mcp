@@ -35,10 +35,11 @@ export const auditCaptureMiddleware: RequestHandler = (req, res, next) => {
     const requestId = req.requestId ?? null;
     const sub = req.oauth?.sub ?? null;
     const email = req.oauth?.email ?? null;
+    const cwMemberId = req.identity?.cwMember?.id ?? null;
     const sql = getSql();
     sql`
-      INSERT INTO mcp_audit_log (request_id, auth_sub, auth_email, tool, args, duration_ms, status, error_message)
-      VALUES (${requestId}, ${sub}, ${email}, ${tool}, ${sql.json((args ?? null) as never)}, ${durationMs}, ${status}, ${errorMessage})
+      INSERT INTO mcp_audit_log (request_id, auth_sub, auth_email, cw_member_id, tool, args, duration_ms, status, error_message)
+      VALUES (${requestId}, ${sub}, ${email}, ${cwMemberId}, ${tool}, ${sql.json((args ?? null) as never)}, ${durationMs}, ${status}, ${errorMessage})
     `.catch((err: unknown) => {
       console.warn(
         `[audit] failed to record /mcp call (tool=${tool}): ${err instanceof Error ? err.message : String(err)}`,

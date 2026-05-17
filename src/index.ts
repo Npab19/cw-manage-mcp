@@ -29,6 +29,8 @@ import {
 } from './oauth/index.js';
 import { requestContextMiddleware } from './middleware/request-context.js';
 import { auditCaptureMiddleware } from './middleware/audit-capture.js';
+import { identityResolverMiddleware, type ResolvedIdentity } from './middleware/identity-resolver.js';
+import { gateServerWithPolicy } from './middleware/policy-gate.js';
 import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
 import { getCwConnection } from './config.js';
@@ -78,26 +80,30 @@ if (isOAuthConfigured()) {
   );
 }
 
-function createServer(ctx: CwRequestContext): McpServer {
+function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null): McpServer {
   const server = new McpServer({
     name: 'cw-manage-mcp',
     version: '1.0.0',
   });
+  // Register tools through a proxy that drops tool() calls the
+  // identity isn't allowed to use. Prompts and other methods pass
+  // through unchanged.
+  const gated = gateServerWithPolicy(server, identity);
 
-  serviceTools.register(server, ctx);
-  companyTools.register(server, ctx);
-  financeTools.register(server, ctx);
-  timeTools.register(server, ctx);
-  projectTools.register(server, ctx);
-  systemTools.register(server, ctx);
-  scheduleTools.register(server, ctx);
-  salesTools.register(server, ctx);
-  reportingTools.register(server, ctx);
-  expenseTools.register(server, ctx);
-  procurementTools.register(server, ctx);
-  marketingTools.register(server, ctx);
-  webhookTools.register(server, ctx);
-  describeTool.register(server, ctx);
+  serviceTools.register(gated, ctx);
+  companyTools.register(gated, ctx);
+  financeTools.register(gated, ctx);
+  timeTools.register(gated, ctx);
+  projectTools.register(gated, ctx);
+  systemTools.register(gated, ctx);
+  scheduleTools.register(gated, ctx);
+  salesTools.register(gated, ctx);
+  reportingTools.register(gated, ctx);
+  expenseTools.register(gated, ctx);
+  procurementTools.register(gated, ctx);
+  marketingTools.register(gated, ctx);
+  webhookTools.register(gated, ctx);
+  describeTool.register(gated, ctx);
   prompts.register(server);
 
   return server;
@@ -136,7 +142,7 @@ async function handleMcpRequest(req: Request, res: Response, body?: unknown): Pr
       .json({ error: 'Missing required query parameters: companyId, publicKey, privateKey' });
     return;
   }
-  const server = createServer(ctx);
+  const server = createServer(ctx, req.identity ?? null);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
@@ -188,9 +194,9 @@ app.get('/readyz', async (_req, res) => {
 
 registerOAuthRoutes(app);
 
-app.post('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
-app.get('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
-app.delete('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
+app.post('/mcp', oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
+app.get('/mcp', oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
+app.delete('/mcp', oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
 
 const port = parseInt(process.env.PORT ?? '3000', 10);
 
