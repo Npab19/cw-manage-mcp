@@ -38,6 +38,7 @@ import { buildAdminRouter, ADMIN_VIEWS_DIR } from './admin/router.js';
 import { generateBootstrapCode } from './admin/auth.js';
 import { printBootstrapBanner } from './admin/setup.js';
 import { getSql } from './db.js';
+import { startCron } from './cron.js';
 // @ts-expect-error -- express-ejs-layouts ships untyped, but it's a one-liner middleware.
 import expressLayouts from 'express-ejs-layouts';
 
@@ -211,6 +212,9 @@ async function start(): Promise<void> {
     await pingDb();
     await runMigrations();
     bootstrap = await initSetupState();
+    if (!bootstrap.required) {
+      await startCron();
+    }
   } else {
     console.warn('DATABASE_URL not set — running without the dashboard DB (legacy mode).');
   }
