@@ -25,4 +25,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
 
   addTool(server, 'get_audit_trail', 'Retrieve the audit trail (activity log). Always pass `conditions` to filter — this can return tens of thousands of records. Filter by record type/ID, e.g. `type=\'Ticket\' AND auditTargetId=12345`. Pass `fields` to project only what you need.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/system/auditTrail', args)));
+
+  addTool(server, 'get_system_info', 'Retrieve server-side system info (version, cloud region, server identity). Primarily for ops/health checks — accepts no arguments.', {},
+    () => handleToolCall(ctx, (c) => cwFetch(c, '/system/info')));
 }

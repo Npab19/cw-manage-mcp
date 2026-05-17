@@ -13,6 +13,10 @@ import * as systemTools from './tools/system.js';
 import * as scheduleTools from './tools/schedule.js';
 import * as salesTools from './tools/sales.js';
 import * as reportingTools from './tools/reporting.js';
+import * as expenseTools from './tools/expense.js';
+import * as procurementTools from './tools/procurement.js';
+import * as marketingTools from './tools/marketing.js';
+import * as webhookTools from './tools/webhook.js';
 import * as prompts from './prompts/index.js';
 
 import {
@@ -77,6 +81,10 @@ function createServer(ctx: CwRequestContext): McpServer {
   scheduleTools.register(server, ctx);
   salesTools.register(server, ctx);
   reportingTools.register(server, ctx);
+  expenseTools.register(server, ctx);
+  procurementTools.register(server, ctx);
+  marketingTools.register(server, ctx);
+  webhookTools.register(server, ctx);
   prompts.register(server);
 
   return server;
