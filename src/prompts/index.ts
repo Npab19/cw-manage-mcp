@@ -55,7 +55,7 @@ Compile findings into a concise standup format:
     'Generate a client health review: open tickets, agreements, and recent activity.',
     { companyIdentifier: z.string().describe('Company name or ID to review') },
     (args) => {
-      const safeCompany = escapeConditionLiteral(args.companyIdentifier);
+      const safeCompany = escapeConditionLiteral(args.companyIdentifier ?? '');
       return ({
       messages: [{
         role: 'user' as const,
@@ -89,7 +89,7 @@ Compile into a professional client review:
     'Generate a technician productivity report: utilization, ticket throughput, and resolution time.',
     { memberIdentifier: z.string().describe('Member identifier (e.g. "jsmith")') },
     (args) => {
-      const safeMember = escapeConditionLiteral(args.memberIdentifier);
+      const safeMember = escapeConditionLiteral(args.memberIdentifier ?? '');
       return {
       messages: [{
         role: 'user' as const,
@@ -159,7 +159,7 @@ For each item, include the ticket ID, summary, company name, priority, age, and 
     'Generate a comprehensive skills assessment for a technician with training recommendations.',
     { memberIdentifier: z.string().describe('Member identifier (e.g. "jsmith")') },
     (args) => {
-      const safeMember = escapeConditionLiteral(args.memberIdentifier);
+      const safeMember = escapeConditionLiteral(args.memberIdentifier ?? '');
       return {
       messages: [{
         role: 'user' as const,
@@ -331,7 +331,7 @@ Compile into a weekly manager report:
     'Analyze a client\'s most common ticket patterns and recommend preventive measures.',
     { companyIdentifier: z.string().describe('Company name to analyze') },
     (args) => {
-      const safeCompany = escapeConditionLiteral(args.companyIdentifier);
+      const safeCompany = escapeConditionLiteral(args.companyIdentifier ?? '');
       return {
       messages: [{
         role: 'user' as const,
