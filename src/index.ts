@@ -27,6 +27,8 @@ import {
   PROTECTED_RESOURCE_METADATA_PATH,
 } from './oauth/index.js';
 import { requestContextMiddleware } from './middleware/request-context.js';
+import { runMigrations } from './migrations/runner.js';
+import { pingDb } from './db.js';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
 for (const key of required) {
@@ -171,10 +173,24 @@ app.get('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res))
 app.delete('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res));
 
 const port = parseInt(process.env.PORT ?? '3000', 10);
-app.listen(port, () => {
-  console.log(`CW Manage MCP server listening on http://localhost:${port}/mcp`);
-  console.log(`Base URL: ${process.env.CW_BASE_URL}/${process.env.CW_CODEBASE}/apis/3.0`);
-  if (isOAuthConfigured()) {
-    console.log(`OAuth metadata: ${process.env.PUBLIC_BASE_URL}${PROTECTED_RESOURCE_METADATA_PATH}`);
+
+async function start(): Promise<void> {
+  if (process.env.DATABASE_URL) {
+    await pingDb();
+    await runMigrations();
+  } else {
+    console.warn('DATABASE_URL not set — running without the dashboard DB (legacy mode).');
   }
+  app.listen(port, () => {
+    console.log(`CW Manage MCP server listening on http://localhost:${port}/mcp`);
+    console.log(`Base URL: ${process.env.CW_BASE_URL}/${process.env.CW_CODEBASE}/apis/3.0`);
+    if (isOAuthConfigured()) {
+      console.log(`OAuth metadata: ${process.env.PUBLIC_BASE_URL}${PROTECTED_RESOURCE_METADATA_PATH}`);
+    }
+  });
+}
+
+start().catch((err) => {
+  console.error('Startup failed:', err);
+  process.exit(1);
 });

@@ -17,6 +17,7 @@ services:
       - CW_COMPANY_ID=${CW_COMPANY_ID}
       - CW_PUBLIC_KEY=${CW_PUBLIC_KEY}
       - CW_PRIVATE_KEY=${CW_PRIVATE_KEY}
+      - DATABASE_URL=postgres://cw_mcp:${POSTGRES_PASSWORD}@postgres:5432/cw_mcp_dashboard
     volumes:
       - oauth-keys:/data
     healthcheck:
@@ -25,6 +26,24 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=cw_mcp_dashboard
+      - POSTGRES_USER=cw_mcp
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cw_mcp -d cw_mcp_dashboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   cloudflared:
@@ -36,3 +55,4 @@ services:
 
 volumes:
   oauth-keys:
+  postgres-data:

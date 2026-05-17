@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-migrations.mjs",
     "start": "node dist/index.js",
     "dev": "node --loader ts-node/esm src/index.ts"
   },
@@ -15,6 +15,7 @@
     "express": "^4.21.2",
     "jose": "^6.2.3",
     "p-limit": "^3.1.0",
+    "postgres": "^3.4.9",
     "zod": "^3.23.8"
   },
   "devDependencies": {
