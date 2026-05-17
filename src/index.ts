@@ -28,6 +28,7 @@ import {
   PROTECTED_RESOURCE_METADATA_PATH,
 } from './oauth/index.js';
 import { requestContextMiddleware } from './middleware/request-context.js';
+import { auditCaptureMiddleware } from './middleware/audit-capture.js';
 import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
 import { getCwConnection } from './config.js';
@@ -186,9 +187,9 @@ app.get('/readyz', async (_req, res) => {
 
 registerOAuthRoutes(app);
 
-app.post('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
-app.get('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res));
-app.delete('/mcp', oauthMiddleware, async (req, res) => handleMcpRequest(req, res));
+app.post('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
+app.get('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
+app.delete('/mcp', oauthMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
 
 const port = parseInt(process.env.PORT ?? '3000', 10);
 

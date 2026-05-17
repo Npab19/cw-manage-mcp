@@ -1,0 +1,83 @@
+<section class="card">
+  <h1>MCP audit log</h1>
+  <p class="muted">One row per <code>/mcp</code> tool call. Best-effort capture — failures to record never block the response.</p>
+
+  <form method="get" action="/admin/audit-log" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+    <label>From
+      <input type="text" name="from" value="<%= filters.from || '' %>" placeholder="YYYY-MM-DD or ISO" />
+    </label>
+    <label>To
+      <input type="text" name="to" value="<%= filters.to || '' %>" placeholder="YYYY-MM-DD or ISO" />
+    </label>
+    <label>Email contains
+      <input type="text" name="email" value="<%= filters.email || '' %>" />
+    </label>
+    <label>Tool
+      <select name="tool">
+        <option value="">— any —</option>
+        <% for (const t of tools) { %>
+          <option value="<%= t %>" <%= filters.tool === t ? 'selected' : '' %>><%= t %></option>
+        <% } %>
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="">— any —</option>
+        <option value="success" <%= filters.status === 'success' ? 'selected' : '' %>>success</option>
+        <option value="error" <%= filters.status === 'error' ? 'selected' : '' %>>error</option>
+      </select>
+    </label>
+    <label>Args contain
+      <input type="text" name="argsSearch" value="<%= filters.argsSearch || '' %>" placeholder="substring" />
+    </label>
+    <div style="display: flex; align-items: end; gap: 8px;">
+      <input type="submit" value="Filter" />
+      <a class="button secondary" href="/admin/audit-log">Reset</a>
+      <a class="button secondary" href="/admin/audit-log.csv?<%= qs %>">CSV</a>
+    </div>
+  </form>
+
+  <p class="muted" style="margin-top: 16px;"><%= total.toLocaleString() %> total row(s) match.</p>
+
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Email</th>
+          <th>Tool</th>
+          <th>Status</th>
+          <th>Duration</th>
+          <th>Request ID</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (rows.length === 0) { %>
+          <tr><td colspan="6" class="muted">No matching rows.</td></tr>
+        <% } %>
+        <% for (const r of rows) { %>
+          <tr>
+            <td><%= r.ts.toISOString() %></td>
+            <td><%= r.auth_email || '' %></td>
+            <td><code><%= r.tool || '' %></code></td>
+            <td><%= r.status %><%= r.error_message ? ' (' + r.error_message + ')' : '' %></td>
+            <td><%= r.duration_ms != null ? r.duration_ms + 'ms' : '' %></td>
+            <td class="muted" style="font-family: ui-monospace, monospace; font-size: 12px;"><%= r.request_id || '' %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if (totalPages > 1) { %>
+    <p style="margin-top: 16px; display: flex; gap: 8px; align-items: center;">
+      <% if (page > 1) { %>
+        <a class="button secondary" href="?<%= qs.replace(/(^|&)page=\d+/, '').replace(/^&/, '') %>&page=<%= page - 1 %>">← Prev</a>
+      <% } %>
+      <span class="muted">Page <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %>
+        <a class="button secondary" href="?<%= qs.replace(/(^|&)page=\d+/, '').replace(/^&/, '') %>&page=<%= page + 1 %>">Next →</a>
+      <% } %>
+    </p>
+  <% } %>
+</section>

@@ -19,6 +19,7 @@ import {
   updateOauthProviderHandler,
   testCwConnectionAuthedHandler,
 } from './settings.js';
+import { auditLogGetHandler, auditLogCsvHandler } from './audit-log.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -55,6 +56,9 @@ export function buildAdminRouter(): Router {
   router.post('/settings/cw-connection', updateCwConnectionHandler);
   router.post('/settings/cw-connection/test', testCwConnectionAuthedHandler);
   router.post('/settings/oauth-provider', updateOauthProviderHandler);
+
+  router.get('/audit-log', auditLogGetHandler);
+  router.get('/audit-log.csv', auditLogCsvHandler);
 
   return router;
 }
