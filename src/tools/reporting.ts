@@ -572,7 +572,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
   addTool(
     server,
     'get_helpdesk_team_report',
-    'Helpdesk team performance: per-member stats (tickets, hours, resolution time) and top issue types. When `boardId` is set, time entries are scoped to that board\'s tickets.',
+    'Helpdesk team performance: per-member stats (tickets, hours, resolution time) and top issue types. Prefer passing `boardId` — unscoped queries pull every time entry in the date range and can time out at the CW API (HTTP 500); when scoped, time entries are filtered to that board\'s tickets. The partial-failure path still returns ticket data with a warning in `_errors` if time entries fail.',
     {
       boardId: z.number().int().min(1).optional().describe('Board ID to filter (omit for all boards)'),
       days: z.number().int().min(1).optional().describe('Number of past days to analyze (default: 30)'),
