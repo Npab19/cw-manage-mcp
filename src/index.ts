@@ -17,6 +17,7 @@ import * as expenseTools from './tools/expense.js';
 import * as procurementTools from './tools/procurement.js';
 import * as marketingTools from './tools/marketing.js';
 import * as webhookTools from './tools/webhook.js';
+import * as describeTool from './tools/describe.js';
 import * as prompts from './prompts/index.js';
 
 import {
@@ -85,6 +86,7 @@ function createServer(ctx: CwRequestContext): McpServer {
   procurementTools.register(server, ctx);
   marketingTools.register(server, ctx);
   webhookTools.register(server, ctx);
+  describeTool.register(server, ctx);
   prompts.register(server);
 
   return server;
