@@ -33,7 +33,7 @@ import { identityResolverMiddleware, type ResolvedIdentity } from './middleware/
 import { gateServerWithPolicy } from './middleware/policy-gate.js';
 import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
-import { getCwConnection } from './config.js';
+import { getCwConnection, getOauthProvider } from './config.js';
 import { buildAdminRouter, ADMIN_VIEWS_DIR } from './admin/router.js';
 import { generateBootstrapCode } from './admin/auth.js';
 import { printBootstrapBanner } from './admin/setup.js';
@@ -43,52 +43,12 @@ import { startCron } from './cron.js';
 import expressLayouts from 'express-ejs-layouts';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
-for (const key of required) {
-  if (!process.env[key]) {
-    console.error(`Missing required environment variable: ${key}`);
-    process.exit(1);
-  }
-}
-
-if (isOAuthConfigured()) {
-  const missingOauth = [
-    'OAUTH_CLIENT_ID',
-    'OAUTH_CLIENT_SECRET',
-    'OAUTH_ALLOWED_EMAIL_DOMAINS',
-    'PUBLIC_BASE_URL',
-  ].filter((k) => !process.env[k]);
-  if (missingOauth.length > 0) {
-    console.error(
-      `OAUTH_ISSUER is set but the following are missing: ${missingOauth.join(' + ')}. All are required when OAuth is enabled.`,
-    );
-    process.exit(1);
-  }
-  const missingCwCreds = ['CW_COMPANY_ID', 'CW_PUBLIC_KEY', 'CW_PRIVATE_KEY'].filter(
-    (k) => !process.env[k],
-  );
-  if (missingCwCreds.length > 0) {
-    console.error(
-      `OAuth is enabled but server-side CW credentials are missing: ${missingCwCreds.join(' + ')}. All three are required when OAuth is on.`,
-    );
-    process.exit(1);
-  }
-  console.log(
-    `OAuth enabled — issuer: ${process.env.OAUTH_ISSUER}, public base URL: ${process.env.PUBLIC_BASE_URL}, allowed email domains: ${process.env.OAUTH_ALLOWED_EMAIL_DOMAINS}`,
-  );
-} else {
-  console.warn(
-    'OAuth NOT configured — /mcp accepts URL-param credentials. Set OAUTH_ISSUER + OAUTH_CLIENT_ID + OAUTH_CLIENT_SECRET + OAUTH_ALLOWED_EMAIL_DOMAINS + PUBLIC_BASE_URL to enable bearer-token auth.',
-  );
-}
 
 function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null): McpServer {
   const server = new McpServer({
     name: 'cw-manage-mcp',
     version: '1.0.0',
   });
-  // Register tools through a proxy that drops tool() calls the
-  // identity isn't allowed to use. Prompts and other methods pass
-  // through unchanged.
   const gated = gateServerWithPolicy(server, identity);
 
   serviceTools.register(gated, ctx);
@@ -110,40 +70,15 @@ function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null):
   return server;
 }
 
-function extractCredentialsFromQuery(req: Request): CwRequestContext | null {
-  const companyId = req.query.companyId as string | undefined;
-  const publicKey = req.query.publicKey as string | undefined;
-  const privateKey = req.query.privateKey as string | undefined;
-  const baseUrl = process.env.CW_BASE_URL;
-  const codebase = process.env.CW_CODEBASE;
-  const clientId = process.env.CW_CLIENT_ID;
-
-  if (!companyId || !publicKey || !privateKey || !baseUrl || !codebase || !clientId) {
-    return null;
-  }
-
-  return { baseUrl, codebase, clientId, companyId, publicKey, privateKey };
-}
-
 async function handleMcpRequest(req: Request, res: Response, body?: unknown): Promise<void> {
-  let ctx: CwRequestContext | null;
-  if (isOAuthConfigured()) {
-    const conn = await getCwConnection();
-    if (!conn || !conn.companyId || !conn.publicKey || !conn.privateKey) {
-      res.status(503).json({ error: 'CW connection is not configured. Complete the setup wizard at /admin/setup.' });
-      return;
-    }
-    ctx = conn;
-  } else {
-    ctx = extractCredentialsFromQuery(req);
-  }
-  if (!ctx) {
+  const conn = await getCwConnection();
+  if (!conn || !conn.companyId || !conn.publicKey || !conn.privateKey) {
     res
-      .status(401)
-      .json({ error: 'Missing required query parameters: companyId, publicKey, privateKey' });
+      .status(503)
+      .json({ error: 'CW connection is not configured. Complete the setup wizard at /admin/setup.' });
     return;
   }
-  const server = createServer(ctx, req.identity ?? null);
+  const server = createServer(conn, req.identity ?? null);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
@@ -207,17 +142,29 @@ interface BootstrapState {
 }
 
 async function start(): Promise<void> {
+  for (const key of required) {
+    if (!process.env[key]) {
+      console.error(`Missing required environment variable: ${key}`);
+      process.exit(1);
+    }
+  }
+
   let bootstrap: BootstrapState = { required: false, code: null };
   if (process.env.DATABASE_URL) {
     await pingDb();
     await runMigrations();
     bootstrap = await initSetupState();
     if (!bootstrap.required) {
+      await assertOauthConfigured();
       await startCron();
     }
   } else {
-    console.warn('DATABASE_URL not set — running without the dashboard DB (legacy mode).');
+    console.warn(
+      'DATABASE_URL not set — Phase 2+ features (wizard, audit log viewer, users, permissions) are disabled.',
+    );
+    await assertOauthConfigured();
   }
+
   app.listen(port, () => {
     console.log(`CW Manage MCP server listening on http://localhost:${port}/mcp`);
     console.log(`Base URL: ${process.env.CW_BASE_URL}/${process.env.CW_CODEBASE}/apis/3.0`);
@@ -239,6 +186,24 @@ async function initSetupState(): Promise<BootstrapState> {
   if (rows[0]?.setup_completed_at) return { required: false, code: null };
   const code = generateBootstrapCode();
   return { required: true, code };
+}
+
+/**
+ * OAuth is required from Phase 3 onward. Accepts either env-var
+ * configuration or a dashboard_settings.oauth_provider row.
+ */
+async function assertOauthConfigured(): Promise<void> {
+  if (isOAuthConfigured()) return;
+  if (process.env.DATABASE_URL) {
+    const provider = await getOauthProvider();
+    if (provider) return;
+  }
+  console.error(
+    'OAuth is required. Either set OAUTH_ISSUER + OAUTH_CLIENT_ID + OAUTH_CLIENT_SECRET + ' +
+      'OAUTH_ALLOWED_EMAIL_DOMAINS + PUBLIC_BASE_URL, or run /admin/setup to configure via the wizard, ' +
+      'then restart.',
+  );
+  process.exit(1);
 }
 
 start().catch((err) => {

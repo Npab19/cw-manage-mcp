@@ -256,27 +256,23 @@ Your MCP server will be reachable at your configured Cloudflare hostname (e.g. `
 
 ### Connecting to the Server
 
-Credentials are passed as **URL query parameters** — not as tool arguments. Build your connection URL like this:
+The MCP server uses OAuth 2.1 — no credentials in the URL. Clients sign in through your IdP and the server validates a Bearer JWT on each request.
 
 ```
-http://localhost:3000/mcp?companyId=mycompany&publicKey=abc123&privateKey=xyz789
+https://cw-mcp.yourdomain.com/mcp
 ```
 
-Or via Cloudflare Tunnel:
-
-```
-https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKey=xyz789
-```
+CW connection credentials are configured server-side via the setup wizard at `/admin/setup` (first run only) or the Settings page (ongoing). Each MCP user's tool surface is derived from their CW security role's allow-list configured at `/admin/permissions`.
 
 ### Setting Up in Claude.ai
 
 1. Go to **claude.ai** → Profile → **Settings** → **Integrations**
 2. Click **Add integration**
-3. Paste your full MCP URL (with query parameters):
+3. Paste the MCP URL (no query parameters):
    ```
-   https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKey=xyz789
+   https://cw-mcp.yourdomain.com/mcp
    ```
-4. Save — Claude will discover all 80 tools and 10 prompts automatically
+4. Save — Claude will run the OAuth flow against your IdP, then list the tools your CW role grants.
 
 ### Example — list open tickets on a specific board
 
@@ -306,8 +302,10 @@ https://cw-mcp.yourdomain.com/mcp?companyId=mycompany&publicKey=abc123&privateKe
 ### Testing with MCP Inspector
 
 ```sh
-npx @modelcontextprotocol/inspector "http://localhost:3000/mcp?companyId=mycompany&publicKey=abc123&privateKey=xyz789"
+npx @modelcontextprotocol/inspector "https://cw-mcp.yourdomain.com/mcp"
 ```
+
+The Inspector will walk the OAuth flow against your IdP on first connect.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -341,22 +339,9 @@ Cloud base URLs by region:
 <!-- AUTHENTICATION -->
 ## Authentication
 
-The server supports two auth modes — pick one per deployment:
+The server runs a full **OAuth 2.1 Authorization Server** to MCP clients and delegates the actual user login to an external IdP (Entra ID, Google, etc). The server mints its own RS256 JWTs that it validates on `/mcp`. **OAuth is required from Phase 3 onward** — the URL-query-parameter credential mode that earlier phases supported has been removed.
 
-1. **URL query parameter credentials** (default, legacy) — passes CW credentials in the URL on each `/mcp` request. Fine for single-user / local-only use; leaks credentials via referer headers, proxy logs, and browser history.
-2. **OAuth 2.1 with the MCP server as Authorization Server** (recommended) — the MCP server runs a full OAuth 2.1 AS (with Dynamic Client Registration) to MCP clients like Claude.ai, and delegates the actual user login to an external IdP (Entra ID, Google, etc). The server mints its own RS256 JWTs that it validates on `/mcp`, so MCP clients see a fully spec-compliant AS even when the upstream IdP doesn't support DCR. CW credentials are set server-side via env vars.
-
-OAuth is **disabled by default** — the server keeps the URL-param path for backward compatibility. Setting `OAUTH_ISSUER` flips the mode.
-
-### URL query parameter auth (legacy)
-
-Per-user credentials (`companyId`, `publicKey`, `privateKey`) are passed as URL query parameters on the MCP endpoint. The server extracts them on each HTTP request and constructs the ConnectWise Basic Auth header:
-
-```
-Authorization: Basic Base64(companyId+publicKey:privateKey)
-```
-
-If any credential query parameter is missing, the server returns HTTP `401` before processing the MCP message. Credentials are **never** stored in server state, `.env`, or logs. They exist only for the duration of the HTTP request.
+CW connection credentials, OAuth provider settings, and the admin allow-list are configured through the admin dashboard's setup wizard (or env vars for an unattended bootstrap).
 
 ### OAuth 2.1 (MCP server as Authorization Server)
 
