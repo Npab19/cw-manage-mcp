@@ -118,7 +118,7 @@ export const adminAuthMiddleware: RequestHandler = async (req, res, next) => {
   }
   const extra = await getExtraAdminEmails();
   if (!isAdminEmail(payload.email, extra)) {
-    res.status(403).render('403', { email: payload.email });
+    res.status(403).render('403', { title: 'Not authorized', email: payload.email });
     return;
   }
   req.admin = { sub: payload.sub, email: payload.email.toLowerCase() };
@@ -197,7 +197,7 @@ export const callbackHandler: RequestHandler = async (req, res, next) => {
     const allowed = provider?.allowedEmailDomains ?? [];
     const domain = email.split('@')[1]?.toLowerCase();
     if (!domain || !allowed.includes(domain)) {
-      res.status(403).render('403', { email });
+      res.status(403).render('403', { title: 'Not authorized', email });
       return;
     }
     const sub = extractSubFromIdToken(token.id_token) ?? email;
