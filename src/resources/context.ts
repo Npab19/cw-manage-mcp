@@ -122,19 +122,35 @@ export async function saveContext(
 ): Promise<ActiveContextDoc> {
   const sql = getSql();
   const normalized = normalizeScopeId(scopeType, scopeId);
-  const maxRows = await sql<{ next_version: number }[]>`
-    SELECT COALESCE(MAX(version), 0) + 1 AS next_version
-      FROM context_documents
-     WHERE scope_type = ${scopeType}
-       AND scope_id IS NOT DISTINCT FROM ${normalized}
-  `;
-  const nextVersion = maxRows[0]?.next_version ?? 1;
-  const inserted = await sql<ActiveRow[]>`
-    INSERT INTO context_documents (scope_type, scope_id, markdown, version, updated_by, is_active)
-    VALUES (${scopeType}, ${normalized}, ${markdown}, ${nextVersion}, ${updatedBy}, TRUE)
-    RETURNING id::text AS id, scope_type, scope_id, markdown, version, updated_by, updated_at
-  `;
-  const row = inserted[0];
+  // Run deactivate + insert in one transaction. The migration trigger
+  // (AFTER INSERT) can't help us here — PostgreSQL checks the partial
+  // unique index `idx_context_documents_active_scoped` BEFORE the
+  // trigger fires, so the trigger never gets a chance to clear the
+  // prior active row. Doing the UPDATE first inside a transaction
+  // makes the trigger a harmless no-op and avoids the unique
+  // violation entirely.
+  const row = await sql.begin(async (tx) => {
+    await tx`
+      UPDATE context_documents
+         SET is_active = FALSE
+       WHERE scope_type = ${scopeType}
+         AND scope_id IS NOT DISTINCT FROM ${normalized}
+         AND is_active = TRUE
+    `;
+    const maxRows = await tx<{ next_version: number }[]>`
+      SELECT COALESCE(MAX(version), 0) + 1 AS next_version
+        FROM context_documents
+       WHERE scope_type = ${scopeType}
+         AND scope_id IS NOT DISTINCT FROM ${normalized}
+    `;
+    const nextVersion = maxRows[0]?.next_version ?? 1;
+    const inserted = await tx<ActiveRow[]>`
+      INSERT INTO context_documents (scope_type, scope_id, markdown, version, updated_by, is_active)
+      VALUES (${scopeType}, ${normalized}, ${markdown}, ${nextVersion}, ${updatedBy}, TRUE)
+      RETURNING id::text AS id, scope_type, scope_id, markdown, version, updated_by, updated_at
+    `;
+    return inserted[0];
+  });
   if (!row) throw new Error('context_documents insert returned no row');
   return rowToDoc(row);
 }
