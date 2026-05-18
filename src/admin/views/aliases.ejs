@@ -1,9 +1,11 @@
 <% if (flash === 'alias-saved') { %>
-  <div class="flash success">Alias saved.</div>
+  <div class="flash success">Group saved.</div>
 <% } else if (flash === 'alias-deleted') { %>
-  <div class="flash success">Alias removed.</div>
+  <div class="flash success">Group removed.</div>
 <% } else if (flash === 'alias-missing') { %>
-  <div class="flash error">Alias name and at least one board ID are required.</div>
+  <div class="flash error">Group name and at least one board ID are required.</div>
+<% } else if (flash === 'bulk-empty') { %>
+  <div class="flash error">Paste at least one valid CSV row.</div>
 <% } else if (flash === 'deprecated-saved') { %>
   <div class="flash success">Deprecation saved.</div>
 <% } else if (flash === 'deprecated-deleted') { %>
@@ -12,54 +14,115 @@
   <div class="flash error">Board ID must be a positive integer.</div>
 <% } %>
 
-<section class="card">
-  <h1>Board aliases</h1>
-  <p class="muted">Named shortcuts (e.g. <code>"core"</code>) that composite tools can accept via the <code>board_filter</code> argument. Stored globally; ad-hoc lists of IDs always work too.</p>
+<% if (bulkResult) { %>
+  <section class="card">
+    <h1>Bulk import result</h1>
+    <p>
+      <strong><%= bulkResult.added %></strong> added,
+      <strong><%= bulkResult.updated %></strong> updated,
+      <strong><%= bulkResult.errors.length %></strong> error(s) out of <%= bulkResult.total + bulkResult.errors.length %> row(s).
+    </p>
+    <% if (bulkResult.errors.length > 0) { %>
+      <h2>Errors</h2>
+      <table>
+        <thead><tr><th>Line</th><th>Reason</th><th>Raw</th></tr></thead>
+        <tbody>
+          <% for (const e of bulkResult.errors) { %>
+            <tr><td><%= e.line %></td><td><%= e.message %></td><td><code><%= e.raw %></code></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
+    <p style="margin-top: 16px;"><a class="button" href="/admin/aliases">Back to board groups</a></p>
+  </section>
+<% } %>
 
-  <% if (aliases.length === 0) { %>
-    <p class="muted">No aliases defined yet.</p>
+<% if (!bulkResult) { %>
+<section class="card">
+  <h1>Board groups</h1>
+  <p class="muted">
+    Named lists of CW board IDs (e.g. <code>"alpha-all"</code>, <code>"noc-alerts"</code>) that
+    composite tools accept via the <code>board_filter</code> argument. Categories are just for
+    organizing the page — tool callers reference groups by name regardless of category.
+  </p>
+
+  <% if (categorized.length === 0) { %>
+    <p class="muted">No groups defined yet. Add one below or use the bulk import.</p>
   <% } else { %>
-    <table>
-      <thead>
-        <tr><th>Name</th><th>Boards</th><th>Description</th><th>Status</th><th>Updated</th><th></th></tr>
-      </thead>
-      <tbody>
-        <% for (const a of aliases) { %>
-          <tr<% if (a.is_deprecated) { %> class="muted"<% } %>>
-            <td><code><%= a.name %></code></td>
-            <td><%= a.board_ids.join(', ') %></td>
-            <td><%= a.description || '' %></td>
-            <td><%= a.is_deprecated ? 'deprecated' : 'active' %></td>
-            <td><%= a.updated_at.toISOString() %><% if (a.created_by) { %> by <%= a.created_by %><% } %></td>
-            <td>
-              <form method="post" action="/admin/aliases/<%= encodeURIComponent(a.name) %>/delete" style="display: inline;"
-                onsubmit="return confirm('Delete alias <%= a.name %>?');">
-                <button type="submit" class="button secondary">Delete</button>
-              </form>
-            </td>
-          </tr>
-        <% } %>
-      </tbody>
-    </table>
+    <% for (const cat of categorized) { %>
+      <h2 style="margin-top: 20px;"><%= cat.category || 'Uncategorized' %></h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Boards</th><th>Description</th><th>Status</th><th>Updated</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% for (const a of cat.rows) { %>
+            <tr<% if (a.is_deprecated) { %> class="muted"<% } %>>
+              <td><code><%= a.name %></code></td>
+              <td><%= a.board_ids.join(', ') %></td>
+              <td><%= a.description || '' %></td>
+              <td><%= a.is_deprecated ? 'deprecated' : 'active' %></td>
+              <td><%= a.updated_at.toISOString() %><% if (a.created_by) { %> by <%= a.created_by %><% } %></td>
+              <td>
+                <form method="post" action="/admin/aliases/<%= encodeURIComponent(a.name) %>/delete" style="display: inline;"
+                  onsubmit="return confirm('Delete group <%= a.name %>?');">
+                  <button type="submit" class="button secondary">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
   <% } %>
 
-  <h2 style="margin-top: 24px;">Add / update alias</h2>
+  <h2 style="margin-top: 24px;">Add / update group</h2>
   <form method="post" action="/admin/aliases">
     <label>Name (lowercase, no spaces)
-      <input type="text" name="name" required pattern="[a-zA-Z0-9_\-]+" />
+      <input type="text" name="name" required pattern="[a-zA-Z0-9_\-]+" placeholder="alpha-all" />
+    </label>
+    <label>Category (optional, used only for organizing this page)
+      <input type="text" name="category" list="alias-category-list" placeholder="Pods" />
+      <datalist id="alias-category-list">
+        <% const seen = new Set(); %>
+        <% for (const cat of categorized) { if (cat.category && !seen.has(cat.category)) { seen.add(cat.category); %>
+          <option value="<%= cat.category %>"></option>
+        <% } } %>
+      </datalist>
     </label>
     <label>Description
-      <input type="text" name="description" placeholder="Optional — surfaced in tool listings" />
+      <input type="text" name="description" placeholder="Optional — what does this group cover?" />
     </label>
     <label>Board IDs (comma- or space-separated)
-      <input type="text" name="board_ids" required placeholder="42, 51, 67" />
+      <input type="text" name="board_ids" required placeholder="145, 146, 147" />
     </label>
     <label style="display: flex; align-items: center; gap: 6px; margin-top: 8px;">
       <input type="checkbox" name="is_deprecated" />
       Mark as deprecated (still resolves, but emits a warning when used)
     </label>
     <p style="margin-top: 16px;">
-      <input type="submit" value="Save alias" />
+      <input type="submit" value="Save group" />
+    </p>
+  </form>
+</section>
+
+<section class="card">
+  <h1>Bulk import</h1>
+  <p class="muted">
+    Paste CSV — one group per line, format: <code>category,name,description,board_ids</code>.
+    The <code>board_ids</code> field can be quoted if it contains commas. Existing groups with the
+    same <code>name</code> are upserted (description, category, and board IDs are overwritten).
+    Use <code>#</code> at the start of a line to comment it out.
+  </p>
+  <form method="post" action="/admin/aliases/bulk">
+    <label>CSV
+      <textarea name="csv" rows="14" style="font-family: ui-monospace, monospace; font-size: 13px;" placeholder="# category,name,description,board_ids
+Pods,alpha-all,Alpha pod (all boards),&quot;145,146,147,166,148,136&quot;
+Pods,charlie-all,Charlie pod (all boards),&quot;149,150,151,167,152,137&quot;
+NOC,noc-alerts,Alert + critical alert boards,&quot;119,61&quot;"></textarea>
+    </label>
+    <p style="margin-top: 16px;">
+      <input type="submit" value="Bulk import" />
     </p>
   </form>
 </section>
@@ -108,3 +171,4 @@
     </p>
   </form>
 </section>
+<% } %>

@@ -44,6 +44,7 @@ import {
 import {
   aliasesGetHandler,
   aliasCreateHandler,
+  aliasBulkHandler,
   aliasDeleteHandler,
   deprecatedBoardAddHandler,
   deprecatedBoardDeleteHandler,
@@ -127,6 +128,7 @@ export function buildAdminRouter(): Router {
 
   router.get('/aliases', aliasesGetHandler);
   router.post('/aliases', aliasCreateHandler);
+  router.post('/aliases/bulk', aliasBulkHandler);
   router.post('/aliases/:name/delete', aliasDeleteHandler);
   router.post('/aliases/deprecated', deprecatedBoardAddHandler);
   router.post('/aliases/deprecated/:boardId/delete', deprecatedBoardDeleteHandler);
