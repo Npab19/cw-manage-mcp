@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { getSql } from '../db.js';
 import { invalidateExclusionsCache } from '../composites/company-exclusions.js';
+import { getActiveCompanies } from '../composites/companies-cache.js';
 
 interface ExclusionRow {
   cw_company_id: string;
@@ -14,21 +15,26 @@ interface ExclusionRow {
 export const exclusionsGetHandler: RequestHandler = async (req, res, next) => {
   try {
     const sql = getSql();
-    const rows = await sql<ExclusionRow[]>`
-      SELECT
-        cw_company_id::text AS cw_company_id,
-        cw_company_identifier,
-        cw_company_name,
-        reason,
-        added_by,
-        added_at
-      FROM excluded_companies
-      ORDER BY added_at DESC
-    `;
+    const [rows, companiesResult] = await Promise.all([
+      sql<ExclusionRow[]>`
+        SELECT
+          cw_company_id::text AS cw_company_id,
+          cw_company_identifier,
+          cw_company_name,
+          reason,
+          added_by,
+          added_at
+        FROM excluded_companies
+        ORDER BY added_at DESC
+      `,
+      getActiveCompanies(),
+    ]);
     res.render('exclusions', {
       title: 'Excluded companies',
       admin: req.admin,
       exclusions: rows,
+      companies: companiesResult.companies,
+      companiesTruncated: companiesResult.truncated,
       flash: typeof req.query.flash === 'string' ? req.query.flash : null,
     });
   } catch (err) {

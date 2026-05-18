@@ -3,7 +3,7 @@
 <% } else if (flash === 'removed') { %>
   <div class="flash success">Exclusion removed.</div>
 <% } else if (flash === 'missing') { %>
-  <div class="flash error">Company ID (positive integer) and reason are required.</div>
+  <div class="flash error">Pick a company and provide a reason.</div>
 <% } %>
 
 <section class="card">
@@ -22,9 +22,8 @@
     <table>
       <thead>
         <tr>
-          <th>Company ID</th>
+          <th>Company</th>
           <th>Identifier</th>
-          <th>Name</th>
           <th>Reason</th>
           <th>Added</th>
           <th></th>
@@ -33,14 +32,13 @@
       <tbody>
         <% for (const e of exclusions) { %>
           <tr>
-            <td><%= e.cw_company_id %></td>
+            <td><%= e.cw_company_name || '' %> <span class="muted">#<%= e.cw_company_id %></span></td>
             <td><%= e.cw_company_identifier || '' %></td>
-            <td><%= e.cw_company_name || '' %></td>
             <td><%= e.reason %></td>
             <td><%= e.added_at.toISOString() %> by <%= e.added_by %></td>
             <td>
               <form method="post" action="/admin/exclusions/<%= e.cw_company_id %>/delete" style="display: inline;"
-                onsubmit="return confirm('Remove exclusion for company <%= e.cw_company_id %>?');">
+                onsubmit="return confirm('Remove exclusion for <%= e.cw_company_name || ('company ' + e.cw_company_id) %>?');">
                 <button type="submit" class="button secondary">Un-exclude</button>
               </form>
             </td>
@@ -51,16 +49,45 @@
   <% } %>
 
   <h2 style="margin-top: 24px;">Exclude a company</h2>
-  <form method="post" action="/admin/exclusions">
-    <label>CW company ID
-      <input type="number" name="cw_company_id" required min="1" />
+
+  <% if (companies.length === 0) { %>
+    <div class="flash error">Couldn't load the active CW company list. Check the CW connection on Settings. You can still enter a company ID directly below.</div>
+  <% } else if (companiesTruncated) { %>
+    <div class="flash">Loaded the first 5000 active companies. If the one you need isn't shown, refine the search or enter the ID manually.</div>
+  <% } %>
+
+  <form method="post" action="/admin/exclusions" id="exclude-form">
+    <label>Search companies
+      <input type="text" id="company-search" placeholder="Type a name or identifier..." autocomplete="off"
+        <% if (companies.length === 0) { %>disabled<% } %> />
     </label>
-    <label>Company identifier (optional, for display)
-      <input type="text" name="cw_company_identifier" placeholder="ACME" />
+    <div id="company-picker" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 4px;">
+      <% if (companies.length === 0) { %>
+        <p class="muted" style="margin: 8px;">No companies loaded.</p>
+      <% } %>
+      <% for (const c of companies) { %>
+        <div class="company-row" role="button" tabindex="0"
+             data-needle="<%= (c.name + ' ' + c.identifier + ' ' + c.id).toLowerCase() %>"
+             data-id="<%= c.id %>"
+             data-identifier="<%= c.identifier %>"
+             data-name="<%= c.name %>"
+             style="padding: 4px 8px; cursor: pointer; font-size: 13px; border-radius: 3px;">
+          <%= c.name %>
+          <% if (c.identifier) { %><span class="muted">(<%= c.identifier %>)</span><% } %>
+          <span class="muted" style="margin-left: 6px;">#<%= c.id %></span>
+        </div>
+      <% } %>
+    </div>
+    <p class="muted" style="margin-top: 4px; font-size: 12px;">
+      Selected: <strong id="company-selected">none</strong>
+    </p>
+
+    <label>Company ID (auto-populated; edit only if you need to enter an ID not in the list)
+      <input type="number" name="cw_company_id" id="company-id-input" required min="1" />
     </label>
-    <label>Company name (optional, for display)
-      <input type="text" name="cw_company_name" placeholder="Acme Corp" />
-    </label>
+    <input type="hidden" name="cw_company_identifier" id="company-identifier-input" />
+    <input type="hidden" name="cw_company_name" id="company-name-input" />
+
     <label>Reason
       <input type="text" name="reason" required placeholder="Why is this company being excluded?" />
     </label>
@@ -69,3 +96,64 @@
     </p>
   </form>
 </section>
+
+<script>
+  (function() {
+    var search = document.getElementById('company-search');
+    var picker = document.getElementById('company-picker');
+    var idInput = document.getElementById('company-id-input');
+    var identifierInput = document.getElementById('company-identifier-input');
+    var nameInput = document.getElementById('company-name-input');
+    var selectedLabel = document.getElementById('company-selected');
+    if (!picker || !idInput) return;
+
+    function clearHighlight() {
+      picker.querySelectorAll('.company-row').forEach(function(row) {
+        row.style.background = '';
+      });
+    }
+
+    function selectRow(row) {
+      clearHighlight();
+      row.style.background = 'var(--bg)';
+      idInput.value = row.dataset.id;
+      identifierInput.value = row.dataset.identifier;
+      nameInput.value = row.dataset.name;
+      selectedLabel.textContent = row.dataset.name + ' (#' + row.dataset.id + ')';
+    }
+
+    if (search) {
+      search.addEventListener('input', function() {
+        var q = this.value.toLowerCase().trim();
+        picker.querySelectorAll('.company-row').forEach(function(row) {
+          row.style.display = !q || row.dataset.needle.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+    }
+
+    picker.addEventListener('click', function(ev) {
+      var row = ev.target.closest('.company-row');
+      if (row) selectRow(row);
+    });
+    picker.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        var row = ev.target.closest('.company-row');
+        if (row) { ev.preventDefault(); selectRow(row); }
+      }
+    });
+
+    // If the user types into the ID field directly, clear the highlight
+    // + selected-label so the UI doesn't lie.
+    idInput.addEventListener('input', function() {
+      clearHighlight();
+      var id = idInput.value.trim();
+      if (id) {
+        identifierInput.value = '';
+        nameInput.value = '';
+        selectedLabel.textContent = '#' + id + ' (manual)';
+      } else {
+        selectedLabel.textContent = 'none';
+      }
+    });
+  })();
+</script>
