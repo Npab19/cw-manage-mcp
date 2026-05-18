@@ -69,12 +69,13 @@ services:
       - BACKUP_PATH=/backups
       - BACKUP_RETENTION_DAYS=30
     entrypoint: ["/bin/sh", "-c"]
-    command: |
-      /pg-backup.sh || true
-      while true; do
-        sleep 86400
-        /pg-backup.sh || true
-      done
+    command:
+      - |-
+        sh /pg-backup.sh || true
+        while true; do
+          sleep 86400
+          sh /pg-backup.sh || true
+        done
     restart: unless-stopped
 
   cloudflared:
