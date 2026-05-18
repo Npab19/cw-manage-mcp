@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { identityAllowsTool, type ResolvedIdentity } from './identity-resolver.js';
 import { composeMergedContext } from '../resources/context.js';
+import { redactToolResponseText } from './field-projection.js';
 
 const EMPTY_CONTEXT_MARKER = '_No context documents configured';
 const CONTEXT_TTL_MS =
@@ -18,6 +19,28 @@ function shouldInjectContext(identity: ResolvedIdentity, toolName: string): bool
 interface ToolResult {
   content?: Array<{ type: string; text?: string; [k: string]: unknown }>;
   [k: string]: unknown;
+}
+
+function wrapHandlerWithFieldRedaction(
+  handler: (...args: unknown[]) => Promise<ToolResult>,
+  identity: ResolvedIdentity,
+  toolName: string,
+): (...args: unknown[]) => Promise<ToolResult> {
+  return async (...args: unknown[]) => {
+    const result = await handler(...args);
+    if (!result?.content || !Array.isArray(result.content)) return result;
+    const projections = identity.policy.fieldProjections[toolName];
+    if (identity.isAdmin || identity.serviceAccount || !projections || projections.length === 0) {
+      return result;
+    }
+    const next = result.content.map((entry) => {
+      if (entry?.type === 'text' && typeof entry.text === 'string') {
+        return { ...entry, text: redactToolResponseText(identity, toolName, entry.text) };
+      }
+      return entry;
+    });
+    return { ...result, content: next };
+  };
 }
 
 function wrapHandlerWithContextInjection(
@@ -82,11 +105,14 @@ export function gateServerWithPolicy(server: McpServer, identity: ResolvedIdenti
             const lastIdx = rest.length - 1;
             const handler = rest[lastIdx];
             if (typeof handler === 'function') {
-              rest[lastIdx] = wrapHandlerWithContextInjection(
-                handler as (...args: unknown[]) => Promise<ToolResult>,
-                identity,
-                name,
-              );
+              // Outer (called first) → inner (called last):
+              //   context-injection → field-redaction → original handler.
+              // Original handler runs first, redaction trims its response,
+              // then context-injection prepends the org context entry.
+              let wrapped = handler as (...args: unknown[]) => Promise<ToolResult>;
+              wrapped = wrapHandlerWithFieldRedaction(wrapped, identity, name);
+              wrapped = wrapHandlerWithContextInjection(wrapped, identity, name);
+              rest[lastIdx] = wrapped;
             }
           }
           return (value as (...args: unknown[]) => unknown).call(target, name, ...rest);

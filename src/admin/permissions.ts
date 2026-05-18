@@ -20,6 +20,7 @@ interface RoleDetail {
   role_id: string;
   role_name: string;
   allowed_tools: string[];
+  field_projections: Record<string, string[]>;
   auto_derived: boolean;
   updated_at: Date;
   updated_by: string | null;
@@ -93,6 +94,7 @@ export const permissionsEditHandler: RequestHandler = async (req, res, next) => 
         role_id::text AS role_id,
         role_name,
         allowed_tools,
+        field_projections,
         auto_derived,
         updated_at,
         updated_by
@@ -120,6 +122,7 @@ export const permissionsEditHandler: RequestHandler = async (req, res, next) => 
       role,
       members: memberRows,
       allowedSet: new Set(role.allowed_tools),
+      fieldProjections: role.field_projections ?? {},
       groups: buildToolCatalog(),
       flash: typeof req.query.flash === 'string' ? req.query.flash : null,
     });
@@ -148,23 +151,41 @@ export const permissionsResyncHandler: RequestHandler = async (req, res, next) =
   }
 };
 
+const FIELDPROJ_PREFIX = 'fieldproj-';
+
 export const permissionsUpdateHandler: RequestHandler = async (req, res, next) => {
   try {
     const roleId = req.params.roleId;
-    if (!roleId) {
+    if (typeof roleId !== 'string' || !roleId) {
       res.status(400).send('Missing roleId');
       return;
     }
-    const body = req.body as { allowed_tools?: string[] | string };
+    const body = req.body as Record<string, string[] | string | undefined>;
     const raw = body.allowed_tools;
     const submitted = Array.isArray(raw) ? raw : raw ? [raw] : [];
-    // Drop admin-only tools defensively — never persistable on a role.
     const allowed = submitted.filter((t) => typeof t === 'string' && !ALWAYS_ADMIN_ONLY.has(t));
+    const allowedSet = new Set(allowed);
+
+    // Build field_projections only for tools still in the allow-list —
+    // dropping projections for now-revoked tools mirrors the rest of the
+    // policy lifecycle (revoke a tool, lose its projections).
+    const projections: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (!key.startsWith(FIELDPROJ_PREFIX) || typeof value !== 'string') continue;
+      const toolName = key.slice(FIELDPROJ_PREFIX.length);
+      if (!allowedSet.has(toolName)) continue;
+      const paths = value
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (paths.length > 0) projections[toolName] = paths;
+    }
 
     const sql = getSql();
     const result = await sql<{ updated_at: Date }[]>`
       UPDATE permission_policies
         SET allowed_tools = ${allowed},
+            field_projections = ${sql.json(projections as never)},
             auto_derived = FALSE,
             updated_at = now(),
             updated_by = ${req.admin?.email ?? null}
