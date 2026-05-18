@@ -1,0 +1,110 @@
+<% if (flash === 'alias-saved') { %>
+  <div class="flash success">Alias saved.</div>
+<% } else if (flash === 'alias-deleted') { %>
+  <div class="flash success">Alias removed.</div>
+<% } else if (flash === 'alias-missing') { %>
+  <div class="flash error">Alias name and at least one board ID are required.</div>
+<% } else if (flash === 'deprecated-saved') { %>
+  <div class="flash success">Deprecation saved.</div>
+<% } else if (flash === 'deprecated-deleted') { %>
+  <div class="flash success">Deprecation removed.</div>
+<% } else if (flash === 'deprecated-bad-id') { %>
+  <div class="flash error">Board ID must be a positive integer.</div>
+<% } %>
+
+<section class="card">
+  <h1>Board aliases</h1>
+  <p class="muted">Named shortcuts (e.g. <code>"core"</code>) that composite tools can accept via the <code>board_filter</code> argument. Stored globally; ad-hoc lists of IDs always work too.</p>
+
+  <% if (aliases.length === 0) { %>
+    <p class="muted">No aliases defined yet.</p>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Boards</th><th>Description</th><th>Status</th><th>Updated</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% for (const a of aliases) { %>
+          <tr<% if (a.is_deprecated) { %> class="muted"<% } %>>
+            <td><code><%= a.name %></code></td>
+            <td><%= a.board_ids.join(', ') %></td>
+            <td><%= a.description || '' %></td>
+            <td><%= a.is_deprecated ? 'deprecated' : 'active' %></td>
+            <td><%= a.updated_at.toISOString() %><% if (a.created_by) { %> by <%= a.created_by %><% } %></td>
+            <td>
+              <form method="post" action="/admin/aliases/<%= encodeURIComponent(a.name) %>/delete" style="display: inline;"
+                onsubmit="return confirm('Delete alias <%= a.name %>?');">
+                <button type="submit" class="button secondary">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+
+  <h2 style="margin-top: 24px;">Add / update alias</h2>
+  <form method="post" action="/admin/aliases">
+    <label>Name (lowercase, no spaces)
+      <input type="text" name="name" required pattern="[a-zA-Z0-9_\-]+" />
+    </label>
+    <label>Description
+      <input type="text" name="description" placeholder="Optional — surfaced in tool listings" />
+    </label>
+    <label>Board IDs (comma- or space-separated)
+      <input type="text" name="board_ids" required placeholder="42, 51, 67" />
+    </label>
+    <label style="display: flex; align-items: center; gap: 6px; margin-top: 8px;">
+      <input type="checkbox" name="is_deprecated" />
+      Mark as deprecated (still resolves, but emits a warning when used)
+    </label>
+    <p style="margin-top: 16px;">
+      <input type="submit" value="Save alias" />
+    </p>
+  </form>
+</section>
+
+<section class="card">
+  <h1>Deprecated boards</h1>
+  <p class="muted">Individual board IDs flagged "DO NOT USE". Composite tools that resolve a board_filter touching one of these include a warning in <code>meta.warnings</code>.</p>
+
+  <% if (deprecated.length === 0) { %>
+    <p class="muted">No deprecated boards.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Board ID</th><th>Reason</th><th>Suggested replacement</th><th>Added</th><th></th></tr></thead>
+      <tbody>
+        <% for (const d of deprecated) { %>
+          <tr>
+            <td><%= d.board_id %></td>
+            <td><%= d.reason || '' %></td>
+            <td><%= d.suggested_replacement_id || '' %></td>
+            <td><%= d.created_at.toISOString() %><% if (d.created_by) { %> by <%= d.created_by %><% } %></td>
+            <td>
+              <form method="post" action="/admin/aliases/deprecated/<%= d.board_id %>/delete" style="display: inline;"
+                onsubmit="return confirm('Remove deprecation for board <%= d.board_id %>?');">
+                <button type="submit" class="button secondary">Unflag</button>
+              </form>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+
+  <h2 style="margin-top: 24px;">Flag a board as deprecated</h2>
+  <form method="post" action="/admin/aliases/deprecated">
+    <label>Board ID
+      <input type="number" name="board_id" required min="1" />
+    </label>
+    <label>Reason
+      <input type="text" name="reason" placeholder="Why is this board deprecated?" />
+    </label>
+    <label>Suggested replacement board ID
+      <input type="number" name="suggested_replacement_id" min="1" />
+    </label>
+    <p style="margin-top: 16px;">
+      <input type="submit" value="Save deprecation" />
+    </p>
+  </form>
+</section>

@@ -41,6 +41,13 @@ import {
   contextRollbackHandler,
   contextPreviewHandler,
 } from './context.js';
+import {
+  aliasesGetHandler,
+  aliasCreateHandler,
+  aliasDeleteHandler,
+  deprecatedBoardAddHandler,
+  deprecatedBoardDeleteHandler,
+} from './aliases.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -107,6 +114,12 @@ export function buildAdminRouter(): Router {
   router.get('/context/:scope(users)/:email', contextEditorHandler);
   router.post('/context/:scope(users)/:email', contextSaveHandler);
   router.post('/context/:scope(users)/:email/rollback/:versionId', contextRollbackHandler);
+
+  router.get('/aliases', aliasesGetHandler);
+  router.post('/aliases', aliasCreateHandler);
+  router.post('/aliases/:name/delete', aliasDeleteHandler);
+  router.post('/aliases/deprecated', deprecatedBoardAddHandler);
+  router.post('/aliases/deprecated/:boardId/delete', deprecatedBoardDeleteHandler);
 
   return router;
 }

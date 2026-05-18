@@ -3,6 +3,18 @@ import { z } from 'zod';
 import { cwFetch, cwFetchNextPage, handleToolCall } from '../client.js';
 import { CwRequestContext, PaginationParams } from '../types.js';
 import { addTool, escapeConditionLiteral, idSchema } from './helper.js';
+import { resolveBoardFilter, boardFilterCondition } from '../composites/aliases.js';
+
+const boardFilterSchema = z
+  .union([
+    z.string().describe('Alias name (e.g. "core") or single board ID as a string'),
+    z.number().int().min(1).describe('Single board ID'),
+    z.array(z.number().int().min(1)).describe('Explicit list of board IDs'),
+  ])
+  .optional()
+  .describe(
+    'Scope the report to a set of boards. Accepts an alias name configured at /admin/aliases, a single ID, or a list.',
+  );
 
 const MAX_TOTAL_ROWS = 5000;
 const FANOUT_PAGE_SIZE = 1000;
@@ -375,7 +387,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     'get_recurring_issues_report',
     'Analyze recurring ticket patterns: groups closed tickets by type/subType over a date range and ranks by frequency.',
     {
-      boardId: z.number().int().min(1).optional().describe('Board ID to filter (omit for all boards)'),
+      board_filter: boardFilterSchema,
       days: z.number().int().min(1).optional().describe('Number of past days to analyze (default: 90)'),
       timezone: timezoneSchema,
     },
@@ -383,9 +395,10 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
       handleToolCall(ctx, async (c) => {
         const days = args.days ?? 90;
         const cutoffDate = computeCutoffDate(days, args.timezone ?? 'UTC');
+        const resolvedFilter = await resolveBoardFilter(args.board_filter);
 
         let conditions = `closedFlag=true AND closedDate>=[${cutoffDate}T00:00:00Z]`;
-        if (args.boardId) conditions += ` AND board/id=${args.boardId}`;
+        if (resolvedFilter) conditions += ` AND ${boardFilterCondition(resolvedFilter.boardIds)}`;
 
         const tickets = await safeFetchAll<any>(c, '/service/tickets', {
           conditions,
@@ -441,9 +454,14 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
           periodDays: days,
           cutoffDate,
           timezone: args.timezone ?? 'UTC',
+          boardFilter: resolvedFilter ? resolvedFilter.boardIds : null,
+          aliasName: resolvedFilter?.aliasName ?? null,
           totalClosedTickets: ticketArr.length,
           recurringIssues: ranked,
-          meta: { tickets: pagedMeta(tickets) },
+          meta: {
+            tickets: pagedMeta(tickets),
+            warnings: resolvedFilter?.warnings.length ? resolvedFilter.warnings : undefined,
+          },
           _errors: collectErrorsWithSeverity([
             { result: tickets, label: 'tickets', severity: 'error' },
           ]),
@@ -572,9 +590,9 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
   addTool(
     server,
     'get_helpdesk_team_report',
-    'Helpdesk team performance: per-member stats (tickets, hours, resolution time) and top issue types. Prefer passing `boardId` — unscoped queries pull every time entry in the date range and can time out at the CW API (HTTP 500); when scoped, time entries are filtered to that board\'s tickets. The partial-failure path still returns ticket data with a warning in `_errors` if time entries fail.',
+    'Helpdesk team performance: per-member stats (tickets, hours, resolution time) and top issue types. Prefer passing `board_filter` — unscoped queries pull every time entry in the date range and can time out at the CW API (HTTP 500); when scoped, time entries are filtered to that board\'s tickets. Accepts an alias name, single ID, or list.',
     {
-      boardId: z.number().int().min(1).optional().describe('Board ID to filter (omit for all boards)'),
+      board_filter: boardFilterSchema,
       days: z.number().int().min(1).optional().describe('Number of past days to analyze (default: 30)'),
       top_n: z
         .number()
@@ -590,9 +608,10 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
         const days = args.days ?? 30;
         const topN = args.top_n ?? 20;
         const cutoffDate = computeCutoffDate(days, args.timezone ?? 'UTC');
+        const resolvedFilter = await resolveBoardFilter(args.board_filter);
 
         let ticketConditions = `dateEntered>=[${cutoffDate}T00:00:00Z]`;
-        if (args.boardId) ticketConditions += ` AND board/id=${args.boardId}`;
+        if (resolvedFilter) ticketConditions += ` AND ${boardFilterCondition(resolvedFilter.boardIds)}`;
 
         const tickets = await safeFetchAll<any>(c, '/service/tickets', {
           conditions: ticketConditions,
@@ -602,7 +621,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
         });
         const ticketArr = tickets.data;
         const boardTicketIds = new Set<number>(
-          args.boardId ? ticketArr.map((t: any) => Number(t?.id)).filter((n) => Number.isFinite(n)) : [],
+          resolvedFilter ? ticketArr.map((t: any) => Number(t?.id)).filter((n) => Number.isFinite(n)) : [],
         );
 
         const timeEntries = await safeFetchAll<any>(c, '/time/entries', {
@@ -610,7 +629,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
           orderBy: 'timeStart desc',
         });
         const allTimeEntries = timeEntries.data;
-        const timeArr = args.boardId
+        const timeArr = resolvedFilter
           ? allTimeEntries.filter(
               (te: any) =>
                 te?.chargeToType === 'ServiceTicket' && boardTicketIds.has(Number(te?.chargeToId)),
@@ -692,7 +711,8 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
           periodDays: days,
           cutoffDate,
           timezone: args.timezone ?? 'UTC',
-          boardId: args.boardId ?? null,
+          boardFilter: resolvedFilter ? resolvedFilter.boardIds : null,
+          aliasName: resolvedFilter?.aliasName ?? null,
           totalTickets: ticketArr.length,
           openTickets: ticketArr.filter((t: any) => !t?.closedFlag).length,
           closedTickets: ticketArr.filter((t: any) => t?.closedFlag).length,
@@ -701,7 +721,11 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
             100,
           teamPerformance,
           topIssueTypes,
-          meta: { tickets: pagedMeta(tickets), timeEntries: pagedMeta(timeEntries) },
+          meta: {
+            tickets: pagedMeta(tickets),
+            timeEntries: pagedMeta(timeEntries),
+            warnings: resolvedFilter?.warnings.length ? resolvedFilter.warnings : undefined,
+          },
           _errors: collectErrorsWithSeverity([
             { result: tickets, label: 'tickets', severity: 'error' },
             { result: timeEntries, label: 'timeEntries', severity: 'error' },
@@ -716,7 +740,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     'get_sla_compliance_report',
     'SLA compliance report: per-priority ticket counts, slaMet/slaBreached, compliance percentage, and average response/resolution times vs target.',
     {
-      boardId: z.number().int().min(1).optional().describe('Board ID to filter (omit for all boards)'),
+      board_filter: boardFilterSchema,
       days: z.number().int().min(1).optional().describe('Number of past days to analyze (default: 30)'),
       timezone: timezoneSchema,
     },
@@ -724,9 +748,14 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
       handleToolCall(ctx, async (c) => {
         const days = args.days ?? 30;
         const cutoffDate = computeCutoffDate(days, args.timezone ?? 'UTC');
+        const resolvedFilter = await resolveBoardFilter(args.board_filter);
+        // SLA target lookup historically keyed off a single boardId; for
+        // multi-board filters we use the first resolved ID as a reasonable
+        // approximation. Empty / null filter falls back to the default SLA.
+        const slaTargetBoardId = resolvedFilter?.boardIds[0];
 
         let ticketConditions = `closedFlag=true AND closedDate>=[${cutoffDate}T00:00:00Z]`;
-        if (args.boardId) ticketConditions += ` AND board/id=${args.boardId}`;
+        if (resolvedFilter) ticketConditions += ` AND ${boardFilterCondition(resolvedFilter.boardIds)}`;
 
         const [tickets, slas, priorities] = await Promise.all([
           safeFetchAll<any>(c, '/service/tickets', {
@@ -739,7 +768,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
           safeFetchAll<any>(c, '/service/priorities'),
         ]);
 
-        const slaTargetHours = buildSlaTargetTable(slas.data, args.boardId);
+        const slaTargetHours = buildSlaTargetTable(slas.data, slaTargetBoardId);
         const ticketArr = tickets.data;
         const byPriority = new Map<
           string,
@@ -835,7 +864,8 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
           periodDays: days,
           cutoffDate,
           timezone: args.timezone ?? 'UTC',
-          boardId: args.boardId ?? null,
+          boardFilter: resolvedFilter ? resolvedFilter.boardIds : null,
+          aliasName: resolvedFilter?.aliasName ?? null,
           totalClosedTickets: ticketArr.length,
           complianceByPriority,
           slaDefinitions: slas.data,
@@ -844,6 +874,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
             tickets: pagedMeta(tickets),
             slas: pagedMeta(slas),
             priorities: pagedMeta(priorities),
+            warnings: resolvedFilter?.warnings.length ? resolvedFilter.warnings : undefined,
           },
           _errors: collectErrorsWithSeverity([
             { result: tickets, label: 'tickets', severity: 'error' },
