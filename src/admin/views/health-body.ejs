@@ -1,0 +1,111 @@
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+
+  <section class="card" style="margin: 0;">
+    <h2 style="margin-top: 0;">Process</h2>
+    <table>
+      <tbody>
+        <tr><td class="muted">Uptime</td><td><%= proc.uptime %></td></tr>
+        <tr><td class="muted">Node</td><td><%= proc.nodeVersion %></td></tr>
+        <tr><td class="muted">RSS</td><td><%= proc.rss %></td></tr>
+        <tr><td class="muted">Heap used / total</td><td><%= proc.heapUsed %> / <%= proc.heapTotal %></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" style="margin: 0;">
+    <h2 style="margin-top: 0;">Lookup cache</h2>
+    <table>
+      <tbody>
+        <tr><td class="muted">Entries</td><td><%= cache.size %></td></tr>
+        <tr><td class="muted">Hits</td><td><%= cache.hits %></td></tr>
+        <tr><td class="muted">Misses</td><td><%= cache.misses %></td></tr>
+        <tr><td class="muted">Hit rate</td><td><%= cache.hitRate != null ? (cache.hitRate * 100).toFixed(1) + '%' : '—' %></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" style="margin: 0;">
+    <h2 style="margin-top: 0;">CW latency</h2>
+    <table>
+      <tbody>
+        <tr><td class="muted">Samples</td><td><%= cwTimings.count %></td></tr>
+        <tr><td class="muted">p50</td><td><%= cwTimings.p50 != null ? cwTimings.p50 + ' ms' : '—' %></td></tr>
+        <tr><td class="muted">p95</td><td><%= cwTimings.p95 != null ? cwTimings.p95 + ' ms' : '—' %></td></tr>
+        <tr><td class="muted">mean</td><td><%= cwTimings.mean != null ? cwTimings.mean + ' ms' : '—' %></td></tr>
+        <tr><td class="muted">max</td><td><%= cwTimings.max != null ? cwTimings.max + ' ms' : '—' %></td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="font-size: 12px;">Rolling window of last 500 CW calls.</p>
+  </section>
+
+  <section class="card" style="margin: 0;">
+    <h2 style="margin-top: 0;">Outbound concurrency</h2>
+    <table>
+      <tbody>
+        <tr><td class="muted">Active now</td><td><%= cwConcurrency.active %></td></tr>
+        <tr><td class="muted">Queued</td><td><%= cwConcurrency.pending %></td></tr>
+        <tr><td class="muted">Cap</td><td><%= cwConcurrency.limit %></td></tr>
+        <tr><td class="muted">High-water (last hour)</td><td><%= cwConcurrency.highWaterLastHour %></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" style="margin: 0;">
+    <h2 style="margin-top: 0;">Rate limit</h2>
+    <table>
+      <tbody>
+        <tr><td class="muted">Active buckets</td><td><%= rateLimit.bucketCount %></td></tr>
+        <tr><td class="muted">429s, last hour</td><td><%= rateLimit.recent429sLastHour %></td></tr>
+        <tr><td class="muted">429s, last 100 total</td><td><%= rateLimit.recent429Count %></td></tr>
+      </tbody>
+    </table>
+    <% if (rateLimit.recent.length > 0) { %>
+      <p class="muted" style="font-size: 12px; margin: 8px 0 4px;">Recent throttled identities:</p>
+      <ul class="muted" style="font-size: 12px; margin: 0; padding-left: 18px;">
+        <% for (const r of rateLimit.recent.slice(-5).reverse()) { %>
+          <li><%= r.key %> — <%= r.ts.toISOString() %></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="card" style="margin: 0;">
+    <h2 style="margin-top: 0;">Last user import</h2>
+    <% if (lastImport) { %>
+      <table>
+        <tbody>
+          <tr><td class="muted">Started</td><td><%= lastImport.startedAt.toISOString() %></td></tr>
+          <tr><td class="muted">Status</td><td><strong><%= lastImport.status %></strong></td></tr>
+          <tr><td class="muted">Rows added / updated / deactivated</td><td><%= lastImport.rowsAdded %> / <%= lastImport.rowsUpdated %> / <%= lastImport.rowsDeactivated %></td></tr>
+          <tr><td class="muted">Triggered by</td><td><%= lastImport.triggeredBy || 'cron' %></td></tr>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="muted">No imports have run yet.</p>
+    <% } %>
+  </section>
+
+</div>
+
+<section class="card" style="margin-top: 16px;">
+  <h2 style="margin-top: 0;">Recent errors</h2>
+  <% if (recentErrors.length === 0) { %>
+    <p class="muted">No errored <code>/mcp</code> calls.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>When</th><th>Email</th><th>Tool</th><th>Error</th></tr></thead>
+      <tbody>
+        <% for (const r of recentErrors) { %>
+          <tr>
+            <td><%= r.ts.toISOString() %></td>
+            <td><%= r.auth_email || '' %></td>
+            <td><code><%= r.tool || '' %></code></td>
+            <td><%= r.error_message || '' %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<p class="muted" style="font-size: 11px; margin-top: 8px;">Generated <%= generatedAt %></p>

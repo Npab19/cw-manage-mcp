@@ -1,12 +1,17 @@
 import pLimit from 'p-limit';
 import { buildAuthHeaders } from './auth.js';
 import { CwRequestContext, PaginationParams, ToolResult } from './types.js';
+import { recordCwTiming, recordConcurrency } from './metrics.js';
 
 const CW_TIMEOUT_MS = 180_000;
 const CW_CONCURRENCY = 10;
 const FIVE_XX_RETRY_DELAY_MS = 1_000;
 
 const limit = pLimit(CW_CONCURRENCY);
+
+export function getCwConcurrencyStats(): { active: number; pending: number; limit: number } {
+  return { active: limit.activeCount, pending: limit.pendingCount, limit: CW_CONCURRENCY };
+}
 
 function buildUrl(ctx: CwRequestContext, path: string, params: PaginationParams): string {
   const baseUrl = ctx.baseUrl.replace(/\/$/, '');
@@ -99,7 +104,11 @@ export async function cwFetch<T = unknown>(
   const url = buildUrl(ctx, path, params);
   const headers = buildAuthHeaders(ctx);
 
-  const response = await limit(() => fetchWithRetry(url, headers));
+  const response = await limit(() => {
+    recordConcurrency(limit.activeCount);
+    const startedAt = Date.now();
+    return fetchWithRetry(url, headers).finally(() => recordCwTiming(Date.now() - startedAt));
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -150,7 +159,13 @@ export async function cwFetchNextPage<T = unknown>(
   nextPageUrl: string
 ): Promise<{ data: T; linkHeader?: string; nextPageUrl?: string }> {
   const headers = buildAuthHeaders(ctx);
-  const response = await limit(() => fetchWithRetry(nextPageUrl, headers));
+  const response = await limit(() => {
+    recordConcurrency(limit.activeCount);
+    const startedAt = Date.now();
+    return fetchWithRetry(nextPageUrl, headers).finally(() =>
+      recordCwTiming(Date.now() - startedAt),
+    );
+  });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`ConnectWise pagination follow-up failed (HTTP ${response.status}): ${body}`);

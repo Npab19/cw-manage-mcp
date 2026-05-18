@@ -1,0 +1,15 @@
+<section class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+    <h1 style="margin: 0;">Health</h1>
+    <span class="muted" style="font-size: 12px;">
+      As of <span id="health-as-of"><%= generatedAt %></span> — auto-refreshes every 30s
+    </span>
+  </div>
+</section>
+
+<div id="health-body"
+     hx-get="/admin/health?partial=1"
+     hx-trigger="every 30s"
+     hx-swap="innerHTML">
+  <%- include('health-body', { proc, cache, rateLimit, cwTimings, cwConcurrency, lastImport, recentErrors, generatedAt }) %>
+</div>
