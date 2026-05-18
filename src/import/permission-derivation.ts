@@ -123,28 +123,56 @@ export const COMPOSITE_REQUIREMENTS: Record<string, string[]> = {
   get_sla_compliance_report: ['ServiceTicket'],
 };
 
-const NORMALIZED_MODULES = new Map(
-  Object.keys(MODULE_TOOLS).map((m) => [m.toLowerCase().replace(/[^a-z]/g, ''), m]),
-);
+/**
+ * Maps CW's top-level module names (as returned by
+ * /system/securityRoles/{id}/settings.moduleName) to our internal
+ * MODULE_TOOLS bucket keys. One CW module can map to multiple buckets.
+ *
+ * Notable mappings:
+ * - "Time & Expense" → TimeEntry + Expense (CW bundles them)
+ * - "System" → System + Schedule (CW doesn't expose Schedule as a
+ *   top-level module; we conservatively grant it under System read)
+ * - Internal bucket keys (ServiceTicket, Company, etc.) are passed
+ *   through unchanged so callers can also pass our names directly.
+ */
+const CW_MODULE_ALIASES: Record<string, string[]> = {
+  Companies: ['Company'],
+  Finance: ['Finance'],
+  Marketing: ['Marketing'],
+  Procurement: ['Procurement'],
+  Project: ['Project'],
+  Sales: ['Sales'],
+  'Service Desk': ['ServiceTicket'],
+  System: ['System', 'Schedule'],
+  'Time & Expense': ['TimeEntry', 'Expense'],
+};
 
-function normalizeModuleName(raw: string): string | null {
-  const key = raw.toLowerCase().replace(/[^a-z]/g, '');
-  return NORMALIZED_MODULES.get(key) ?? null;
+const KNOWN_BUCKETS = new Set(Object.keys(MODULE_TOOLS));
+
+function expandToBuckets(raw: string): string[] {
+  const alias = CW_MODULE_ALIASES[raw];
+  if (alias) return alias;
+  // Pass-through for callers that already use our bucket keys
+  // (defaultSeedAllowedTools, tests, etc.).
+  if (KNOWN_BUCKETS.has(raw)) return [raw];
+  return [];
 }
 
 /**
- * Given a list of CW security-role permission strings (module names or
- * permission identifiers from /security_roles/:id/securityRolePermissions),
+ * Given a list of CW module names (e.g. "Companies", "Service Desk",
+ * "Time & Expense") or internal bucket keys (e.g. "ServiceTicket"),
  * return the deduped set of allowed tool names.
+ *
+ * Reference (describe_entity) is always granted — it's a meta tool
+ * for AI schema discovery, not gated by CW perms.
  *
  * Tolerant: unknown modules are ignored. Always-admin-only tools are
  * always excluded — admins get them via the isAdmin path, not the policy.
  */
 export function deriveAllowedTools(modulePermissions: string[]): string[] {
-  const grantedModules = new Set<string>();
+  const grantedModules = new Set<string>(['Reference']);
   for (const raw of modulePermissions) {
-    const norm = normalizeModuleName(raw);
-    if (norm) grantedModules.add(norm);
+    for (const bucket of expandToBuckets(raw)) grantedModules.add(bucket);
   }
 
   const tools = new Set<string>();

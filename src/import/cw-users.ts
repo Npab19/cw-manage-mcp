@@ -66,6 +66,16 @@ async function fetchSecurityRoles(
   }
 }
 
+/**
+ * Fetches a CW security role's per-module settings via
+ * /system/securityRoles/{id}/settings and returns the distinct list of
+ * CW module names where the role has *any* read access (inquireLevel
+ * other than 'None' on at least one function).
+ *
+ * Returned strings are raw CW module names — "Companies", "Service Desk",
+ * "Time & Expense", etc. The derivation layer maps them to our internal
+ * MODULE_TOOLS buckets.
+ */
 async function fetchRolePermissions(
   ctx: CwRequestContext,
   roleId: number,
@@ -74,23 +84,19 @@ async function fetchRolePermissions(
   try {
     const result = await cwFetch<unknown>(
       ctx,
-      `/system/securityRoles/${roleId}/permissions`,
+      `/system/securityRoles/${roleId}/settings`,
+      { pageSize: 1000 },
     );
     if (!Array.isArray(result.data)) return [];
-    const modules: string[] = [];
+    const readable = new Set<string>();
     for (const row of result.data as Array<Record<string, unknown>>) {
-      const moduleObj = row.module as { name?: unknown } | undefined;
-      const moduleName =
-        typeof moduleObj?.name === 'string'
-          ? moduleObj.name
-          : typeof row.moduleName === 'string'
-            ? row.moduleName
-            : typeof row.permission === 'string'
-              ? row.permission
-              : null;
-      if (moduleName) modules.push(moduleName);
+      const moduleName = typeof row.moduleName === 'string' ? row.moduleName : null;
+      const inquireLevel = typeof row.inquireLevel === 'string' ? row.inquireLevel : null;
+      if (!moduleName) continue;
+      if (!inquireLevel || inquireLevel === 'None') continue;
+      readable.add(moduleName);
     }
-    return modules;
+    return [...readable];
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     errors.push({ phase: `permissions:role:${roleId}`, message });
