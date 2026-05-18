@@ -6,6 +6,7 @@ import { ALWAYS_ADMIN_ONLY } from '../import/permission-derivation.js';
 export interface ResolvedCwMember {
   id: number;
   identifier: string;
+  primaryEmail: string | null;
   securityRoleId: number | null;
   securityRoleName: string | null;
 }
@@ -53,11 +54,12 @@ async function findOrAutoLinkMember(
     {
       id: number;
       identifier: string;
+      primary_email: string | null;
       security_role_id: number | null;
       security_role_name: string | null;
     }[]
   >`
-    SELECT m.id, m.identifier, m.security_role_id, m.security_role_name
+    SELECT m.id, m.identifier, m.primary_email, m.security_role_id, m.security_role_name
       FROM user_mappings um
       JOIN cw_members m ON m.id = um.cw_member_id
      WHERE um.oauth_sub = ${sub}
@@ -68,6 +70,7 @@ async function findOrAutoLinkMember(
     return {
       id: mapped[0].id,
       identifier: mapped[0].identifier,
+      primaryEmail: mapped[0].primary_email,
       securityRoleId: mapped[0].security_role_id,
       securityRoleName: mapped[0].security_role_name,
     };
@@ -78,11 +81,12 @@ async function findOrAutoLinkMember(
     {
       id: number;
       identifier: string;
+      primary_email: string | null;
       security_role_id: number | null;
       security_role_name: string | null;
     }[]
   >`
-    SELECT id, identifier, security_role_id, security_role_name
+    SELECT id, identifier, primary_email, security_role_id, security_role_name
       FROM cw_members
      WHERE LOWER(primary_email) = ${email.toLowerCase()}
        AND inactive_flag = FALSE
@@ -99,6 +103,7 @@ async function findOrAutoLinkMember(
   return {
     id: candidate.id,
     identifier: candidate.identifier,
+    primaryEmail: candidate.primary_email,
     securityRoleId: candidate.security_role_id,
     securityRoleName: candidate.security_role_name,
   };

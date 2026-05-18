@@ -165,6 +165,22 @@ export async function rollbackToVersion(
 }
 
 /**
+ * Picks the canonical "user identity" string used to key per-user
+ * context. Prefers the resolved CW member's primary email — that's
+ * what the dashboard editor uses as the scope_id, since admins pick
+ * a user by their CW record, not by their OAuth claim. Falls back to
+ * the OAuth email when there's no mapped CW member (rare; usually
+ * means the user logged in but hasn't been linked yet).
+ */
+function userScopeIdFor(identity: ResolvedIdentity | null): string | null {
+  if (!identity) return null;
+  const cwEmail = identity.cwMember?.primaryEmail?.trim();
+  if (cwEmail) return cwEmail.toLowerCase();
+  if (identity.oauthEmail) return identity.oauthEmail.toLowerCase();
+  return null;
+}
+
+/**
  * Composes the merged context for a given caller: global → role → user.
  * Each layer's markdown is included if it exists, headed by a section
  * marker so the AI can resolve conflicts (more specific wins).
@@ -184,10 +200,11 @@ export async function composeMergedContext(identity: ResolvedIdentity | null): P
     }
   }
 
-  if (identity?.oauthEmail) {
-    const user = await getActiveContext('user', identity.oauthEmail);
+  const userScopeId = userScopeIdFor(identity);
+  if (userScopeId) {
+    const user = await getActiveContext('user', userScopeId);
     if (user) {
-      parts.push(`# User context: ${identity.oauthEmail}\n\n` + user.markdown.trim());
+      parts.push(`# User context: ${userScopeId}\n\n` + user.markdown.trim());
     }
   }
 
@@ -235,7 +252,8 @@ export function assertReadAccess(
   }
 
   if (scopeType === 'user') {
-    if (identity.oauthEmail.toLowerCase() !== (scopeId ?? '').toLowerCase()) {
+    const canonical = userScopeIdFor(identity);
+    if (canonical !== (scopeId ?? '').toLowerCase()) {
       throw new Error(
         `Read access denied: user context for "${scopeId}" is restricted to that user`,
       );
@@ -297,16 +315,16 @@ export function registerContextResources(server: McpServer, identity: ResolvedId
     );
   }
 
-  if (identity?.oauthEmail) {
-    const email = identity.oauthEmail.toLowerCase();
-    const uri = `context://user/${encodeURIComponent(email)}`;
+  const userScopeId = userScopeIdFor(identity);
+  if (userScopeId) {
+    const uri = `context://user/${encodeURIComponent(userScopeId)}`;
     server.resource(
-      `context-user-${email}`,
+      `context-user-${userScopeId}`,
       uri,
-      { mimeType: MIME, description: `User-specific context for ${email}.` },
+      { mimeType: MIME, description: `User-specific context for ${userScopeId}.` },
       async () => {
-        assertReadAccess(identity, 'user', email);
-        const doc = await getActiveContext('user', email);
+        assertReadAccess(identity, 'user', userScopeId);
+        const doc = await getActiveContext('user', userScopeId);
         return makeRead(uri, doc?.markdown ?? '');
       },
     );

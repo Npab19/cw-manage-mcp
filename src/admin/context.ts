@@ -250,9 +250,15 @@ export const contextPreviewHandler: RequestHandler = async (req, res, next) => {
     if (emailRaw) {
       const lower = emailRaw.toLowerCase();
       const rows = await sql<
-        { id: number; identifier: string; security_role_id: number | null; security_role_name: string | null }[]
+        {
+          id: number;
+          identifier: string;
+          primary_email: string | null;
+          security_role_id: number | null;
+          security_role_name: string | null;
+        }[]
       >`
-        SELECT id, identifier, security_role_id, security_role_name
+        SELECT id, identifier, primary_email, security_role_id, security_role_name
           FROM cw_members
          WHERE LOWER(primary_email) = ${lower}
            AND inactive_flag = FALSE
@@ -266,6 +272,7 @@ export const contextPreviewHandler: RequestHandler = async (req, res, next) => {
           cwMember: {
             id: row.id,
             identifier: row.identifier,
+            primaryEmail: row.primary_email,
             securityRoleId: row.security_role_id,
             securityRoleName: row.security_role_name,
           },
