@@ -42,6 +42,8 @@ async function getAllowedDomains(): Promise<string[]> {
 
 export const oauthMiddleware: RequestHandler = async (req, res, next) => {
   if (!isOAuthConfigured()) return next();
+  // Service-account auth (if applicable) already populated req.identity.
+  if (req.identity) return next();
 
   const authHeader = req.get('authorization') ?? req.get('Authorization');
   if (!authHeader) {

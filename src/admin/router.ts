@@ -53,6 +53,11 @@ import {
   exclusionAddHandler,
   exclusionDeleteHandler,
 } from './exclusions.js';
+import {
+  serviceAccountsGetHandler,
+  serviceAccountCreateHandler,
+  serviceAccountRevokeHandler,
+} from './service-accounts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -129,6 +134,10 @@ export function buildAdminRouter(): Router {
   router.get('/exclusions', exclusionsGetHandler);
   router.post('/exclusions', exclusionAddHandler);
   router.post('/exclusions/:id/delete', exclusionDeleteHandler);
+
+  router.get('/service-accounts', serviceAccountsGetHandler);
+  router.post('/service-accounts', serviceAccountCreateHandler);
+  router.post('/service-accounts/:id/revoke', serviceAccountRevokeHandler);
 
   return router;
 }

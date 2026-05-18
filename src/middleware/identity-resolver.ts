@@ -22,6 +22,7 @@ export interface ResolvedIdentity {
   cwMember: ResolvedCwMember | null;
   policy: ResolvedPolicy;
   isAdmin: boolean;
+  serviceAccount?: { id: string; name: string };
 }
 
 declare global {
@@ -134,6 +135,8 @@ async function loadPolicyForRole(roleId: number | null): Promise<ResolvedPolicy>
  * mapping and no admin status gets an empty tool surface.
  */
 export const identityResolverMiddleware: RequestHandler = async (req, _res, next) => {
+  // Service-account auth (if applicable) already populated req.identity.
+  if (req.identity) return next();
   if (!req.oauth?.sub || !req.oauth?.email) {
     return next();
   }
