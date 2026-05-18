@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { getSql } from '../db.js';
 import { runUserImport, lastUserImportRun } from '../import/cw-users.js';
+import { grantAdminRole, revokeAdminRole, listAdminRoleAssignments } from '../services/admin-roles.js';
 
 interface MemberRow {
   id: string;
@@ -27,7 +28,7 @@ export const usersGetHandler: RequestHandler = async (req, res, next) => {
   try {
     const sql = getSql();
     const showApi = req.query.showApi === '1';
-    const [members, unmapped, lastRun] = await Promise.all([
+    const [members, unmapped, lastRun, adminAssignments] = await Promise.all([
       sql<MemberRow[]>`
         SELECT
           m.id::text AS id,
@@ -57,7 +58,15 @@ export const usersGetHandler: RequestHandler = async (req, res, next) => {
         LIMIT 100
       `,
       lastUserImportRun(),
+      listAdminRoleAssignments(),
     ]);
+    const envAdminEmails = (process.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const dbAdminEmails = new Set(
+      adminAssignments.filter((a) => !a.revoked_at).map((a) => a.email.toLowerCase()),
+    );
     res.render('users', {
       title: 'Users',
       admin: req.admin,
@@ -65,6 +74,9 @@ export const usersGetHandler: RequestHandler = async (req, res, next) => {
       unmapped,
       lastRun,
       showApi,
+      envAdminEmails,
+      dbAdminEmails,
+      adminAssignments,
       flash: typeof req.query.flash === 'string' ? req.query.flash : null,
     });
   } catch (err) {
@@ -124,6 +136,43 @@ export const usersUnmapHandler: RequestHandler = async (req, res, next) => {
     const sql = getSql();
     await sql`DELETE FROM user_mappings WHERE oauth_sub = ${oauthSub}`;
     res.redirect(302, '/admin/users?flash=unmap-ok');
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const adminPromoteHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const body = req.body as { email?: string };
+    const email = body.email?.trim().toLowerCase();
+    if (!email) {
+      res.redirect(302, '/admin/users?flash=admin-missing');
+      return;
+    }
+    await grantAdminRole(email, req.admin?.email ?? 'admin');
+    res.redirect(302, '/admin/users?flash=admin-promoted');
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const adminRevokeHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const body = req.body as { email?: string };
+    const email = body.email?.trim().toLowerCase();
+    if (!email) {
+      res.redirect(302, '/admin/users?flash=admin-missing');
+      return;
+    }
+    // Soft block: don't let an admin revoke their own currently-signed-in
+    // session. ADMIN_EMAILS still works as a break-glass anyway, but the
+    // accidental self-revoke would be confusing.
+    if (req.admin?.email && req.admin.email.toLowerCase() === email) {
+      res.redirect(302, '/admin/users?flash=admin-self');
+      return;
+    }
+    await revokeAdminRole(email, req.admin?.email ?? 'admin');
+    res.redirect(302, '/admin/users?flash=admin-revoked');
   } catch (err) {
     next(err);
   }

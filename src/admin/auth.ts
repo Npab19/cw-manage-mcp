@@ -16,6 +16,7 @@ import {
 } from '../oauth/entra-client.js';
 import { getOauthProvider, getConfig } from '../config.js';
 import { getSql } from '../db.js';
+import { isDbAdmin } from '../services/admin-roles.js';
 
 const SESSION_COOKIE = 'mcp_admin_session';
 const SESSION_TTL = '8h';
@@ -37,13 +38,15 @@ interface PendingAdminLogin {
 }
 const pendingLogins = new Map<string, PendingAdminLogin>();
 
-function isAdminEmail(email: string, extra: string[]): boolean {
+async function isAdminEmail(email: string, extra: string[]): Promise<boolean> {
   const lower = email.toLowerCase();
   const fromEnv = (process.env.ADMIN_EMAILS ?? '')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  return fromEnv.includes(lower) || extra.map((e) => e.toLowerCase()).includes(lower);
+  if (fromEnv.includes(lower)) return true;
+  if (extra.map((e) => e.toLowerCase()).includes(lower)) return true;
+  return isDbAdmin(lower);
 }
 
 async function getExtraAdminEmails(): Promise<string[]> {
@@ -117,7 +120,7 @@ export const adminAuthMiddleware: RequestHandler = async (req, res, next) => {
     return;
   }
   const extra = await getExtraAdminEmails();
-  if (!isAdminEmail(payload.email, extra)) {
+  if (!(await isAdminEmail(payload.email, extra))) {
     res.status(403).render('403', { title: 'Not authorized', email: payload.email });
     return;
   }
@@ -226,6 +229,7 @@ export async function isRequestAdmin(req: Request): Promise<boolean> {
   const extra = await getExtraAdminEmails();
   return isAdminEmail(payload.email, extra);
 }
+
 
 // Periodic GC for the in-memory login state.
 setInterval(() => {

@@ -25,6 +25,8 @@ import {
   usersSyncHandler,
   usersMapHandler,
   usersUnmapHandler,
+  adminPromoteHandler,
+  adminRevokeHandler,
 } from './users.js';
 import {
   permissionsListHandler,
@@ -104,6 +106,8 @@ export function buildAdminRouter(): Router {
   router.post('/users/sync', usersSyncHandler);
   router.post('/users/map', usersMapHandler);
   router.post('/users/unmap', usersUnmapHandler);
+  router.post('/users/promote-admin', adminPromoteHandler);
+  router.post('/users/revoke-admin', adminRevokeHandler);
 
   router.get('/permissions', permissionsListHandler);
   router.get('/permissions/:roleId', permissionsEditHandler);

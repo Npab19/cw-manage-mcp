@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import { getSql } from '../db.js';
 import { getConfig } from '../config.js';
 import { ALWAYS_ADMIN_ONLY } from '../import/permission-derivation.js';
+import { isDbAdmin } from '../services/admin-roles.js';
 
 export interface ResolvedCwMember {
   id: number;
@@ -42,7 +43,8 @@ async function isAdminEmail(email: string): Promise<boolean> {
     .filter(Boolean);
   if (fromEnv.includes(lower)) return true;
   const fromDb = await getConfig<string[]>('extra_admin_emails', () => []);
-  return Array.isArray(fromDb) && fromDb.map((e) => e.toLowerCase()).includes(lower);
+  if (Array.isArray(fromDb) && fromDb.map((e) => e.toLowerCase()).includes(lower)) return true;
+  return isDbAdmin(lower);
 }
 
 async function findOrAutoLinkMember(

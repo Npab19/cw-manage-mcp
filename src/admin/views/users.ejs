@@ -8,6 +8,14 @@
   <div class="flash success">Mapping removed.</div>
 <% } else if (flash === 'map-missing' || flash === 'unmap-missing') { %>
   <div class="flash error">Missing required fields.</div>
+<% } else if (flash === 'admin-promoted') { %>
+  <div class="flash success">Admin role granted. The user's next sign-in reaches /admin.</div>
+<% } else if (flash === 'admin-revoked') { %>
+  <div class="flash success">Admin role revoked. The user's current session ends at their next request.</div>
+<% } else if (flash === 'admin-self') { %>
+  <div class="flash error">Can't revoke your own admin role through this UI. Use the DB or have another admin do it.</div>
+<% } else if (flash === 'admin-missing') { %>
+  <div class="flash error">Missing email.</div>
 <% } %>
 
 <section class="card">
@@ -84,12 +92,16 @@
         <th>Role</th>
         <th>Type</th>
         <th>Mapping</th>
+        <th>Admin</th>
         <th>Status</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       <% for (const m of members) { %>
+        <% const memberEmail = (m.primary_email || '').toLowerCase(); %>
+        <% const isEnvAdmin = memberEmail && envAdminEmails.includes(memberEmail); %>
+        <% const isDbAdmin = memberEmail && dbAdminEmails.has(memberEmail); %>
         <tr<% if (m.inactive_flag) { %> class="muted"<% } %>>
           <td><code><%= m.identifier %></code></td>
           <td><%= m.first_name || '' %> <%= m.last_name || '' %></td>
@@ -104,17 +116,71 @@
               <span class="muted">—</span>
             <% } %>
           </td>
-          <td><%= m.inactive_flag ? 'inactive' : 'active' %></td>
           <td>
+            <% if (isEnvAdmin) { %>
+              <span style="color: var(--accent);">env</span>
+            <% } else if (isDbAdmin) { %>
+              <span style="color: var(--accent);">DB</span>
+            <% } else { %>
+              <span class="muted">—</span>
+            <% } %>
+          </td>
+          <td><%= m.inactive_flag ? 'inactive' : 'active' %></td>
+          <td style="display: flex; gap: 4px; flex-wrap: wrap;">
             <% if (m.mapped_oauth_sub) { %>
               <form method="post" action="/admin/users/unmap" style="display: inline;">
                 <input type="hidden" name="oauth_sub" value="<%= m.mapped_oauth_sub %>" />
                 <button type="submit" class="button secondary">Unmap</button>
               </form>
             <% } %>
+            <% if (memberEmail && !isEnvAdmin && !m.inactive_flag) { %>
+              <% if (isDbAdmin) { %>
+                <form method="post" action="/admin/users/revoke-admin" style="display: inline;"
+                  onsubmit="return confirm('Revoke admin role from <%= memberEmail %>?');">
+                  <input type="hidden" name="email" value="<%= memberEmail %>" />
+                  <button type="submit" class="button secondary">Revoke admin</button>
+                </form>
+              <% } else { %>
+                <form method="post" action="/admin/users/promote-admin" style="display: inline;"
+                  onsubmit="return confirm('Grant admin role to <%= memberEmail %>?');">
+                  <input type="hidden" name="email" value="<%= memberEmail %>" />
+                  <button type="submit" class="button secondary">Promote</button>
+                </form>
+              <% } %>
+            <% } %>
           </td>
         </tr>
       <% } %>
     </tbody>
   </table>
+</section>
+
+<section class="card">
+  <h2>Admin role assignments</h2>
+  <p class="muted">
+    DB-backed admin grants (additive to the <code>ADMIN_EMAILS</code> env allow-list, which always
+    wins as a break-glass path). Revoked rows are retained for the audit trail.
+  </p>
+  <% if (adminAssignments.length === 0) { %>
+    <p class="muted">No DB-managed admin assignments yet.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Email</th><th>Granted</th><th>Revoked</th></tr></thead>
+      <tbody>
+        <% for (const a of adminAssignments) { %>
+          <tr<% if (a.revoked_at) { %> class="muted"<% } %>>
+            <td><%= a.email %></td>
+            <td><%= a.granted_at.toISOString() %> by <%= a.granted_by %></td>
+            <td>
+              <% if (a.revoked_at) { %>
+                <%= a.revoked_at.toISOString() %><% if (a.revoked_by) { %> by <%= a.revoked_by %><% } %>
+              <% } else { %>
+                <span class="muted">active</span>
+              <% } %>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
 </section>
