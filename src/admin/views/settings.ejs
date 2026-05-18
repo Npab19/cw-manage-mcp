@@ -2,6 +2,12 @@
   <div class="flash success">CW connection updated.</div>
 <% } else if (flash === 'oauth-saved') { %>
   <div class="flash success">OAuth provider updated.</div>
+<% } else if (flash === 'operational-saved') { %>
+  <div class="flash success">Operational settings saved.</div>
+<% } else if (flash && flash.startsWith('cache-cleared:')) { %>
+  <div class="flash success">Cache cleared (<%= flash.slice('cache-cleared:'.length) %> entries dropped).</div>
+<% } else if (flash === 'rate-buckets-cleared') { %>
+  <div class="flash success">Rate-limit buckets reset. Existing users get a fresh capacity on their next call.</div>
 <% } else if (flash && flash.startsWith('missing:')) { %>
   <div class="flash error">Missing required fields: <%= flash.slice('missing:'.length) %></div>
 <% } %>
@@ -88,5 +94,80 @@
     <p style="margin-top: 16px;">
       <input type="submit" value="Save CW connection" />
     </p>
+  </form>
+</section>
+
+<section class="card">
+  <h1>Operational</h1>
+  <p class="muted">
+    Cache TTL, rate limits, sync schedule, retention windows, backup behavior. Changes take effect
+    on the next request — no restart required. Defaults are shown as placeholders.
+  </p>
+
+  <form method="post" action="/admin/settings/operational">
+    <h2 style="margin-top: 8px;">Cache</h2>
+    <p class="muted">
+      Cache holds <strong><%= cacheStats.size %></strong> entr(ies).
+      Hit rate this process:
+      <strong><%= cacheStats.hitRate != null ? (cacheStats.hitRate * 100).toFixed(1) + '%' : '—' %></strong>
+      (<%= cacheStats.hits %> hits / <%= cacheStats.misses %> misses).
+    </p>
+    <label>Lookup TTL (seconds)
+      <input type="number" name="cacheLookupTtlSeconds" min="1" value="<%= operational.cacheLookupTtlSeconds %>" />
+    </label>
+
+    <h2 style="margin-top: 20px;">Rate limits</h2>
+    <p class="muted">Token-bucket per identity. Capacity = burst size; refill = sustained per minute. Defaults: 60 / 60 for humans, 600 / 600 for service accounts.</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <label>Per-user capacity
+        <input type="number" name="rateUserCapacity" min="1" value="<%= operational.rateUserCapacity %>" />
+      </label>
+      <label>Per-user refill / minute
+        <input type="number" name="rateUserRefillPerMinute" min="1" value="<%= operational.rateUserRefillPerMinute %>" />
+      </label>
+      <label>Per-service-account capacity
+        <input type="number" name="rateSaCapacity" min="1" value="<%= operational.rateSaCapacity %>" />
+      </label>
+      <label>Per-service-account refill / minute
+        <input type="number" name="rateSaRefillPerMinute" min="1" value="<%= operational.rateSaRefillPerMinute %>" />
+      </label>
+    </div>
+
+    <h2 style="margin-top: 20px;">Sync schedules</h2>
+    <label>User import cron
+      <input type="text" name="userImportCron" value="<%= operational.userImportCron %>" placeholder="0 2 * * *" />
+    </label>
+    <p class="muted" style="font-size: 12px;">Standard 5-field cron. Default <code>0 2 * * *</code> (2 AM nightly). Restart required for the cron schedule to take effect.</p>
+
+    <h2 style="margin-top: 20px;">Retention</h2>
+    <label>MCP audit log retention (days)
+      <input type="number" name="auditLogRetentionDays" min="1" value="<%= operational.auditLogRetentionDays %>" />
+    </label>
+    <p class="muted" style="font-size: 12px;">Rows older than this are pruned nightly.</p>
+
+    <h2 style="margin-top: 20px;">Backups</h2>
+    <label style="display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" name="backupEnabled" <%= operational.backupEnabled ? 'checked' : '' %> />
+      Enable nightly Postgres dump
+    </label>
+    <label>Backup path (inside the container)
+      <input type="text" name="backupPath" value="<%= operational.backupPath %>" placeholder="/backups" />
+    </label>
+    <label>Backup retention (days)
+      <input type="number" name="backupRetentionDays" min="1" value="<%= operational.backupRetentionDays %>" />
+    </label>
+
+    <p style="margin-top: 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <input type="submit" value="Save operational settings" />
+    </p>
+  </form>
+
+  <form method="post" action="/admin/settings/cache/clear" style="display: inline; margin-top: 8px;"
+    onsubmit="return confirm('Drop every cached lookup? Next callers refetch.');">
+    <button type="submit" class="button secondary">Clear cache now</button>
+  </form>
+  <form method="post" action="/admin/settings/rate-buckets/reset" style="display: inline; margin-left: 8px;"
+    onsubmit="return confirm('Reset all rate-limit buckets? Everyone gets fresh capacity.');">
+    <button type="submit" class="button secondary">Reset rate-limit buckets</button>
   </form>
 </section>

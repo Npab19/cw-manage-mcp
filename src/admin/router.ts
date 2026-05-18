@@ -18,6 +18,9 @@ import {
   updateCwConnectionHandler,
   updateOauthProviderHandler,
   testCwConnectionAuthedHandler,
+  updateOperationalHandler,
+  clearCacheHandler,
+  resetRateBucketsHandler,
 } from './settings.js';
 import { auditLogGetHandler, auditLogRowsHandler, auditLogCsvHandler } from './audit-log.js';
 import {
@@ -97,6 +100,9 @@ export function buildAdminRouter(): Router {
   router.post('/settings/cw-connection', updateCwConnectionHandler);
   router.post('/settings/cw-connection/test', testCwConnectionAuthedHandler);
   router.post('/settings/oauth-provider', updateOauthProviderHandler);
+  router.post('/settings/operational', updateOperationalHandler);
+  router.post('/settings/cache/clear', clearCacheHandler);
+  router.post('/settings/rate-buckets/reset', resetRateBucketsHandler);
 
   router.get('/audit-log', auditLogGetHandler);
   router.get('/audit-log/rows', auditLogRowsHandler);

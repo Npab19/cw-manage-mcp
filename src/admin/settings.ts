@@ -2,11 +2,61 @@ import type { RequestHandler } from 'express';
 import {
   getCwConnection,
   getOauthProvider,
+  getConfig,
   writeConfig,
   type CwConnectionConfig,
   type OauthProviderConfig,
 } from '../config.js';
 import { buildAuthHeaders } from '../auth.js';
+import { invalidate as invalidateCache, getCacheStats } from '../cache.js';
+import { resetRateLimitBuckets } from '../middleware/rate-limit.js';
+
+interface OperationalSettings {
+  cacheLookupTtlSeconds: number;
+  rateUserCapacity: number;
+  rateUserRefillPerMinute: number;
+  rateSaCapacity: number;
+  rateSaRefillPerMinute: number;
+  userImportCron: string;
+  auditLogRetentionDays: number;
+  backupEnabled: boolean;
+  backupPath: string;
+  backupRetentionDays: number;
+}
+
+const OP_DEFAULTS: OperationalSettings = {
+  cacheLookupTtlSeconds: 3600,
+  rateUserCapacity: 60,
+  rateUserRefillPerMinute: 60,
+  rateSaCapacity: 600,
+  rateSaRefillPerMinute: 600,
+  userImportCron: '0 2 * * *',
+  auditLogRetentionDays: 90,
+  backupEnabled: true,
+  backupPath: '/backups',
+  backupRetentionDays: 30,
+};
+
+async function loadOperationalSettings(): Promise<OperationalSettings> {
+  const fields: Array<[string, keyof OperationalSettings]> = [
+    ['cache.lookup_ttl_seconds', 'cacheLookupTtlSeconds'],
+    ['rate_limit.per_user_capacity', 'rateUserCapacity'],
+    ['rate_limit.per_user_refill_per_minute', 'rateUserRefillPerMinute'],
+    ['rate_limit.per_service_account_capacity', 'rateSaCapacity'],
+    ['rate_limit.per_service_account_refill_per_minute', 'rateSaRefillPerMinute'],
+    ['sync.user_import_cron', 'userImportCron'],
+    ['retention.mcp_audit_log_days', 'auditLogRetentionDays'],
+    ['backup.enabled', 'backupEnabled'],
+    ['backup.path', 'backupPath'],
+    ['backup.retention_days', 'backupRetentionDays'],
+  ];
+  const out = { ...OP_DEFAULTS };
+  for (const [key, prop] of fields) {
+    const value = await getConfig<unknown>(key, () => OP_DEFAULTS[prop]);
+    if (value != null) (out[prop] as unknown) = value;
+  }
+  return out;
+}
 
 const REGION_BASE_URLS: Record<string, string> = {
   na: 'https://api-na.myconnectwise.net',
@@ -31,13 +81,19 @@ function requireFields(body: Record<string, string | undefined>, fields: string[
 
 export const settingsGetHandler: RequestHandler = async (req, res, next) => {
   try {
-    const [cw, oauth] = await Promise.all([getCwConnection(), getOauthProvider()]);
+    const [cw, oauth, operational] = await Promise.all([
+      getCwConnection(),
+      getOauthProvider(),
+      loadOperationalSettings(),
+    ]);
     const flash = typeof req.query.flash === 'string' ? req.query.flash : null;
     res.render('settings', {
       title: 'Settings',
       admin: req.admin,
       cw,
       oauth,
+      operational,
+      cacheStats: getCacheStats(),
       maskSecret,
       regionOptions: REGION_BASE_URLS,
       codebaseOptions: CODEBASE_OPTIONS,
@@ -46,6 +102,46 @@ export const settingsGetHandler: RequestHandler = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+export const updateOperationalHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const body = req.body as Record<string, string | undefined>;
+    const updates: Array<[string, unknown]> = [
+      ['cache.lookup_ttl_seconds', parsePositiveInt(body.cacheLookupTtlSeconds, OP_DEFAULTS.cacheLookupTtlSeconds)],
+      ['rate_limit.per_user_capacity', parsePositiveInt(body.rateUserCapacity, OP_DEFAULTS.rateUserCapacity)],
+      ['rate_limit.per_user_refill_per_minute', parsePositiveInt(body.rateUserRefillPerMinute, OP_DEFAULTS.rateUserRefillPerMinute)],
+      ['rate_limit.per_service_account_capacity', parsePositiveInt(body.rateSaCapacity, OP_DEFAULTS.rateSaCapacity)],
+      ['rate_limit.per_service_account_refill_per_minute', parsePositiveInt(body.rateSaRefillPerMinute, OP_DEFAULTS.rateSaRefillPerMinute)],
+      ['sync.user_import_cron', body.userImportCron?.trim() || OP_DEFAULTS.userImportCron],
+      ['retention.mcp_audit_log_days', parsePositiveInt(body.auditLogRetentionDays, OP_DEFAULTS.auditLogRetentionDays)],
+      ['backup.enabled', body.backupEnabled === 'on'],
+      ['backup.path', body.backupPath?.trim() || OP_DEFAULTS.backupPath],
+      ['backup.retention_days', parsePositiveInt(body.backupRetentionDays, OP_DEFAULTS.backupRetentionDays)],
+    ];
+    for (const [key, value] of updates) {
+      await writeConfig(key, value, req.admin?.email ?? null);
+    }
+    res.redirect(302, '/admin/settings?flash=operational-saved');
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const clearCacheHandler: RequestHandler = (req, res) => {
+  const n = invalidateCache();
+  res.redirect(302, `/admin/settings?flash=cache-cleared:${n}`);
+};
+
+export const resetRateBucketsHandler: RequestHandler = (req, res) => {
+  resetRateLimitBuckets();
+  res.redirect(302, '/admin/settings?flash=rate-buckets-cleared');
 };
 
 export const updateCwConnectionHandler: RequestHandler = async (req, res, next) => {
