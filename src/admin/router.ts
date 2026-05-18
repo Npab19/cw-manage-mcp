@@ -30,6 +30,7 @@ import {
   permissionsListHandler,
   permissionsEditHandler,
   permissionsUpdateHandler,
+  permissionsResyncHandler,
 } from './permissions.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -80,6 +81,7 @@ export function buildAdminRouter(): Router {
   router.get('/permissions', permissionsListHandler);
   router.get('/permissions/:roleId', permissionsEditHandler);
   router.post('/permissions/:roleId', permissionsUpdateHandler);
+  router.post('/permissions/:roleId/resync', permissionsResyncHandler);
 
   return router;
 }

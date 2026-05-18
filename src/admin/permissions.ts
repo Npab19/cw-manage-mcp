@@ -5,6 +5,7 @@ import {
   MODULE_TOOLS,
   COMPOSITE_REQUIREMENTS,
 } from '../import/permission-derivation.js';
+import { resyncRolePolicy } from '../import/cw-users.js';
 
 interface RoleRow {
   role_id: string;
@@ -122,6 +123,26 @@ export const permissionsEditHandler: RequestHandler = async (req, res, next) => 
       groups: buildToolCatalog(),
       flash: typeof req.query.flash === 'string' ? req.query.flash : null,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const permissionsResyncHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const roleId = req.params.roleId;
+    if (!roleId) {
+      res.status(400).send('Missing roleId');
+      return;
+    }
+    const numericRoleId = Number(roleId);
+    if (!Number.isInteger(numericRoleId) || numericRoleId <= 0) {
+      res.status(400).send('Invalid roleId');
+      return;
+    }
+    const result = await resyncRolePolicy(numericRoleId, req.admin?.email ?? 'admin');
+    const flash = result.sourcedFromCw ? 'resynced' : 'resynced_default';
+    res.redirect(302, `/admin/permissions/${roleId}?flash=${flash}`);
   } catch (err) {
     next(err);
   }

@@ -1,6 +1,12 @@
 <% if (flash === 'saved') { %>
   <div class="flash success">Policy saved. auto_derived flipped to false.</div>
 <% } %>
+<% if (flash === 'resynced') { %>
+  <div class="flash success">Re-derived from ConnectWise. auto_derived flipped to true; manual edits discarded.</div>
+<% } %>
+<% if (flash === 'resynced_default') { %>
+  <div class="flash">Re-derived from ConnectWise, but no per-module permissions returned for this role. Default seed applied (ServiceTicket + Company + Reference). auto_derived flipped to true.</div>
+<% } %>
 
 <section class="card">
   <h1><%= role.role_name %></h1>
@@ -13,6 +19,15 @@
     <% } %>
     Last update <%= role.updated_at.toISOString() %><% if (role.updated_by) { %> by <%= role.updated_by %><% } %>.
   </p>
+
+  <form method="post" action="/admin/permissions/<%= role.role_id %>/resync"
+        onsubmit="return confirm('Re-derive this role\'s allow-list from ConnectWise security-role permissions? Any manual edits to this role will be overwritten.');"
+        style="margin: 8px 0 0 0;">
+    <button type="submit" class="button secondary">Re-derive from ConnectWise</button>
+    <small class="muted" style="margin-left: 8px;">
+      Refreshes this row from CW perms and flips auto_derived back to true.
+    </small>
+  </form>
 
   <% if (members.length > 0) { %>
     <p class="muted"><strong>Members with this role:</strong>

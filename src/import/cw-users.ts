@@ -76,7 +76,7 @@ async function fetchSecurityRoles(
  * "Time & Expense", etc. The derivation layer maps them to our internal
  * MODULE_TOOLS buckets.
  */
-async function fetchRolePermissions(
+export async function fetchRolePermissions(
   ctx: CwRequestContext,
   roleId: number,
   errors: UserImportResult['errors'],
@@ -262,6 +262,51 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
     rowsDeactivated,
     errors,
   };
+}
+
+export interface ResyncRolePolicyResult {
+  roleId: number;
+  allowed: string[];
+  sourcedFromCw: boolean;
+  errors: UserImportResult['errors'];
+}
+
+/**
+ * Re-derives a single role's allow-list from its current CW permissions
+ * and overwrites the row in permission_policies, flipping auto_derived
+ * back to TRUE. Use this when an admin wants to discard manual edits
+ * and start from the CW-derived baseline again, or to pick up CW-side
+ * role permission changes between scheduled imports.
+ *
+ * Does NOT touch cw_members or user_import_runs — this is a targeted
+ * policy refresh, not a full re-import.
+ */
+export async function resyncRolePolicy(
+  roleId: number,
+  triggeredBy: string,
+): Promise<ResyncRolePolicyResult> {
+  const sql = getSql();
+  const conn = await getCwConnection();
+  if (!conn || !conn.companyId || !conn.publicKey || !conn.privateKey) {
+    throw new Error('CW connection is not configured — cannot resync role policy');
+  }
+  const errors: UserImportResult['errors'] = [];
+  const modules = await fetchRolePermissions(conn, roleId, errors);
+  const sourcedFromCw = modules.length > 0;
+  const allowed = sourcedFromCw ? deriveAllowedTools(modules) : defaultSeedAllowedTools();
+  const updated = await sql<{ role_id: string }[]>`
+    UPDATE permission_policies
+      SET allowed_tools = ${allowed},
+          auto_derived = TRUE,
+          updated_at = now(),
+          updated_by = ${triggeredBy}
+      WHERE role_id = ${roleId}
+      RETURNING role_id::text AS role_id
+  `;
+  if (updated.length === 0) {
+    throw new Error(`Role ${roleId} not found in permission_policies`);
+  }
+  return { roleId, allowed, sourcedFromCw, errors };
 }
 
 export async function lastUserImportRun(): Promise<{
