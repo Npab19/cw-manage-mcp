@@ -19,6 +19,7 @@ import * as procurementTools from './tools/procurement.js';
 import * as marketingTools from './tools/marketing.js';
 import * as webhookTools from './tools/webhook.js';
 import * as describeTool from './tools/describe.js';
+import * as contextTool from './tools/context.js';
 import * as prompts from './prompts/index.js';
 
 import {
@@ -68,6 +69,11 @@ function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null):
   webhookTools.register(gated, ctx);
   describeTool.register(gated, ctx);
   prompts.register(server);
+
+  // get_context is universal — every authenticated caller gets their
+  // own merged context regardless of the policy allow-list. Workaround
+  // for hosts (Claude.ai) that don't yet read the MCP resources surface.
+  contextTool.register(server, identity);
 
   // Context resources are not gated by the tool allow-list; access is
   // enforced per-resource at read time via assertReadAccess().
