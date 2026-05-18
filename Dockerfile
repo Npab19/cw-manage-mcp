@@ -20,7 +20,11 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
-RUN mkdir -p /data && chown -R node:node /data /app
+# postgresql-client gives us pg_dump for the "Run backup now" admin
+# button. Matches the Postgres major version of the sidecar (16).
+RUN apk add --no-cache postgresql16-client
+
+RUN mkdir -p /data /backups && chown -R node:node /data /backups /app
 
 EXPOSE 3000
 

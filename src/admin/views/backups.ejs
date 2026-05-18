@@ -1,0 +1,42 @@
+<% if (flash === 'run-ok') { %>
+  <div class="flash success">Backup written.</div>
+<% } else if (flash === 'run-error') { %>
+  <div class="flash error">Backup failed — see container logs for the pg_dump error.</div>
+<% } %>
+
+<section class="card">
+  <h1>Backups</h1>
+  <p class="muted">
+    Postgres dumps live in <code><%= dir %></code> (a named volume mounted on both this container
+    and the <code>backup</code> sidecar). Nightly cadence: the sidecar runs <code>pg_dump</code>
+    every 24 hours; files older than <strong><%= retentionDays %></strong> day(s) are pruned.
+    Enabled state: <strong><%= enabled ? 'yes' : 'no' %></strong> (toggle on the Settings page).
+  </p>
+  <% if (dirError) { %>
+    <div class="flash error">Couldn't read the backup directory: <%= dirError %></div>
+  <% } %>
+
+  <p style="margin-top: 16px;">
+    <form method="post" action="/admin/backups/run" style="display: inline;">
+      <button type="submit" class="button">Run backup now</button>
+    </form>
+  </p>
+
+  <% if (files.length === 0) { %>
+    <p class="muted" style="margin-top: 16px;">No dumps in the backup directory yet.</p>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Filename</th><th>Size</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        <% for (const f of files) { %>
+          <tr>
+            <td><code><%= f.name %></code></td>
+            <td><%= f.size %></td>
+            <td><%= f.mtime.toISOString() %></td>
+            <td><a class="button secondary" href="/admin/backups/<%= encodeURIComponent(f.name) %>">Download</a></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+</section>

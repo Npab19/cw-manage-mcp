@@ -65,6 +65,11 @@ import {
   serviceAccountRevokeHandler,
 } from './service-accounts.js';
 import { healthGetHandler } from './health.js';
+import {
+  backupsGetHandler,
+  backupsRunHandler,
+  backupsDownloadHandler,
+} from './backups.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -153,6 +158,10 @@ export function buildAdminRouter(): Router {
   router.post('/service-accounts/:id/revoke', serviceAccountRevokeHandler);
 
   router.get('/health', healthGetHandler);
+
+  router.get('/backups', backupsGetHandler);
+  router.post('/backups/run', backupsRunHandler);
+  router.get('/backups/:filename', backupsDownloadHandler);
 
   return router;
 }
