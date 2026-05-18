@@ -3,9 +3,7 @@
 <% } else if (flash === 'alias-deleted') { %>
   <div class="flash success">Group removed.</div>
 <% } else if (flash === 'alias-missing') { %>
-  <div class="flash error">Group name and at least one board ID are required.</div>
-<% } else if (flash === 'bulk-empty') { %>
-  <div class="flash error">Paste at least one valid CSV row.</div>
+  <div class="flash error">Group name and at least one board are required.</div>
 <% } else if (flash === 'deprecated-saved') { %>
   <div class="flash success">Deprecation saved.</div>
 <% } else if (flash === 'deprecated-deleted') { %>
@@ -14,40 +12,20 @@
   <div class="flash error">Board ID must be a positive integer.</div>
 <% } %>
 
-<% if (bulkResult) { %>
-  <section class="card">
-    <h1>Bulk import result</h1>
-    <p>
-      <strong><%= bulkResult.added %></strong> added,
-      <strong><%= bulkResult.updated %></strong> updated,
-      <strong><%= bulkResult.errors.length %></strong> error(s) out of <%= bulkResult.total + bulkResult.errors.length %> row(s).
-    </p>
-    <% if (bulkResult.errors.length > 0) { %>
-      <h2>Errors</h2>
-      <table>
-        <thead><tr><th>Line</th><th>Reason</th><th>Raw</th></tr></thead>
-        <tbody>
-          <% for (const e of bulkResult.errors) { %>
-            <tr><td><%= e.line %></td><td><%= e.message %></td><td><code><%= e.raw %></code></td></tr>
-          <% } %>
-        </tbody>
-      </table>
-    <% } %>
-    <p style="margin-top: 16px;"><a class="button" href="/admin/aliases">Back to board groups</a></p>
-  </section>
-<% } %>
-
-<% if (!bulkResult) { %>
 <section class="card">
   <h1>Board groups</h1>
   <p class="muted">
-    Named lists of CW board IDs (e.g. <code>"alpha-all"</code>, <code>"noc-alerts"</code>) that
+    Named lists of CW boards (e.g. <code>"alpha-all"</code>, <code>"noc-alerts"</code>) that
     composite tools accept via the <code>board_filter</code> argument. Categories are just for
     organizing the page — tool callers reference groups by name regardless of category.
   </p>
 
+  <% if (boards.length === 0) { %>
+    <div class="flash error">Couldn't load the CW board list. Check the CW connection on the Settings page. You can still type IDs by hand below.</div>
+  <% } %>
+
   <% if (categorized.length === 0) { %>
-    <p class="muted">No groups defined yet. Add one below or use the bulk import.</p>
+    <p class="muted">No groups defined yet — add one below.</p>
   <% } else { %>
     <% for (const cat of categorized) { %>
       <h2 style="margin-top: 20px;"><%= cat.category || 'Uncategorized' %></h2>
@@ -59,7 +37,13 @@
           <% for (const a of cat.rows) { %>
             <tr<% if (a.is_deprecated) { %> class="muted"<% } %>>
               <td><code><%= a.name %></code></td>
-              <td><%= a.board_ids.join(', ') %></td>
+              <td style="max-width: 480px;">
+                <% const namedParts = []; %>
+                <% for (const id of a.board_ids) { %>
+                  <% const n = boardNames.get(id); namedParts.push(n ? `${n} (${id})` : `#${id}`); %>
+                <% } %>
+                <%= namedParts.join(', ') %>
+              </td>
               <td><%= a.description || '' %></td>
               <td><%= a.is_deprecated ? 'deprecated' : 'active' %></td>
               <td><%= a.updated_at.toISOString() %><% if (a.created_by) { %> by <%= a.created_by %><% } %></td>
@@ -77,7 +61,7 @@
   <% } %>
 
   <h2 style="margin-top: 24px;">Add / update group</h2>
-  <form method="post" action="/admin/aliases">
+  <form method="post" action="/admin/aliases" id="group-form">
     <label>Name (lowercase, no spaces)
       <input type="text" name="name" required pattern="[a-zA-Z0-9_\-]+" placeholder="alpha-all" />
     </label>
@@ -93,9 +77,31 @@
     <label>Description
       <input type="text" name="description" placeholder="Optional — what does this group cover?" />
     </label>
-    <label>Board IDs (comma- or space-separated)
-      <input type="text" name="board_ids" required placeholder="145, 146, 147" />
+
+    <label>Pick boards
+      <input type="text" id="board-search" placeholder="Filter by name or ID..." autocomplete="off" />
     </label>
+    <div id="board-picker" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px;">
+      <% if (boards.length === 0) { %>
+        <p class="muted" style="margin: 0;">No boards loaded — type IDs manually below.</p>
+      <% } %>
+      <% for (const b of boards) { %>
+        <label class="board-row" data-needle="<%= (b.name + ' ' + b.id).toLowerCase() %>"
+               style="display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px;">
+          <input type="checkbox" class="board-checkbox" data-id="<%= b.id %>" />
+          <span><%= b.name %> <span class="muted">(<%= b.id %>)</span></span>
+        </label>
+      <% } %>
+    </div>
+    <p class="muted" style="margin-top: 4px; font-size: 12px;">
+      <span id="picked-count">0</span> selected.
+      <a href="#" id="picked-clear" style="margin-left: 8px;">Clear selection</a>
+    </p>
+
+    <label>Board IDs (auto-populated from the picker — edit only if you need to add unknown IDs)
+      <input type="text" name="board_ids" id="board-ids-input" required placeholder="145, 146, 147" />
+    </label>
+
     <label style="display: flex; align-items: center; gap: 6px; margin-top: 8px;">
       <input type="checkbox" name="is_deprecated" />
       Mark as deprecated (still resolves, but emits a warning when used)
@@ -107,41 +113,22 @@
 </section>
 
 <section class="card">
-  <h1>Bulk import</h1>
-  <p class="muted">
-    Paste CSV — one group per line, format: <code>category,name,description,board_ids</code>.
-    The <code>board_ids</code> field can be quoted if it contains commas. Existing groups with the
-    same <code>name</code> are upserted (description, category, and board IDs are overwritten).
-    Use <code>#</code> at the start of a line to comment it out.
-  </p>
-  <form method="post" action="/admin/aliases/bulk">
-    <label>CSV
-      <textarea name="csv" rows="14" style="font-family: ui-monospace, monospace; font-size: 13px;" placeholder="# category,name,description,board_ids
-Pods,alpha-all,Alpha pod (all boards),&quot;145,146,147,166,148,136&quot;
-Pods,charlie-all,Charlie pod (all boards),&quot;149,150,151,167,152,137&quot;
-NOC,noc-alerts,Alert + critical alert boards,&quot;119,61&quot;"></textarea>
-    </label>
-    <p style="margin-top: 16px;">
-      <input type="submit" value="Bulk import" />
-    </p>
-  </form>
-</section>
-
-<section class="card">
   <h1>Deprecated boards</h1>
-  <p class="muted">Individual board IDs flagged "DO NOT USE". Composite tools that resolve a board_filter touching one of these include a warning in <code>meta.warnings</code>.</p>
+  <p class="muted">Individual boards flagged "DO NOT USE". Composite tools that resolve a board_filter touching one of these include a warning in <code>meta.warnings</code>.</p>
 
   <% if (deprecated.length === 0) { %>
     <p class="muted">No deprecated boards.</p>
   <% } else { %>
     <table>
-      <thead><tr><th>Board ID</th><th>Reason</th><th>Suggested replacement</th><th>Added</th><th></th></tr></thead>
+      <thead><tr><th>Board</th><th>Reason</th><th>Suggested replacement</th><th>Added</th><th></th></tr></thead>
       <tbody>
         <% for (const d of deprecated) { %>
+          <% const dn = boardNames.get(d.board_id); %>
+          <% const rn = d.suggested_replacement_id ? boardNames.get(d.suggested_replacement_id) : null; %>
           <tr>
-            <td><%= d.board_id %></td>
+            <td><%= dn ? dn + ' (' + d.board_id + ')' : '#' + d.board_id %></td>
             <td><%= d.reason || '' %></td>
-            <td><%= d.suggested_replacement_id || '' %></td>
+            <td><%= d.suggested_replacement_id ? (rn ? rn + ' (' + d.suggested_replacement_id + ')' : '#' + d.suggested_replacement_id) : '' %></td>
             <td><%= d.created_at.toISOString() %><% if (d.created_by) { %> by <%= d.created_by %><% } %></td>
             <td>
               <form method="post" action="/admin/aliases/deprecated/<%= d.board_id %>/delete" style="display: inline;"
@@ -157,18 +144,85 @@ NOC,noc-alerts,Alert + critical alert boards,&quot;119,61&quot;"></textarea>
 
   <h2 style="margin-top: 24px;">Flag a board as deprecated</h2>
   <form method="post" action="/admin/aliases/deprecated">
-    <label>Board ID
-      <input type="number" name="board_id" required min="1" />
+    <label>Board
+      <% if (boards.length > 0) { %>
+        <select name="board_id" required>
+          <option value="">— pick a board —</option>
+          <% for (const b of boards) { %>
+            <option value="<%= b.id %>"><%= b.name %> (<%= b.id %>)</option>
+          <% } %>
+        </select>
+      <% } else { %>
+        <input type="number" name="board_id" required min="1" />
+      <% } %>
     </label>
     <label>Reason
       <input type="text" name="reason" placeholder="Why is this board deprecated?" />
     </label>
-    <label>Suggested replacement board ID
-      <input type="number" name="suggested_replacement_id" min="1" />
+    <label>Suggested replacement board (optional)
+      <% if (boards.length > 0) { %>
+        <select name="suggested_replacement_id">
+          <option value="">— none —</option>
+          <% for (const b of boards) { %>
+            <option value="<%= b.id %>"><%= b.name %> (<%= b.id %>)</option>
+          <% } %>
+        </select>
+      <% } else { %>
+        <input type="number" name="suggested_replacement_id" min="1" />
+      <% } %>
     </label>
     <p style="margin-top: 16px;">
       <input type="submit" value="Save deprecation" />
     </p>
   </form>
 </section>
-<% } %>
+
+<script>
+  (function() {
+    var search = document.getElementById('board-search');
+    var picker = document.getElementById('board-picker');
+    var hiddenInput = document.getElementById('board-ids-input');
+    var pickedCount = document.getElementById('picked-count');
+    var pickedClear = document.getElementById('picked-clear');
+    if (!search || !picker || !hiddenInput) return;
+
+    function syncFromPicker() {
+      var ids = [];
+      picker.querySelectorAll('.board-checkbox').forEach(function(cb) {
+        if (cb.checked) ids.push(cb.dataset.id);
+      });
+      hiddenInput.value = ids.join(',');
+      pickedCount.textContent = ids.length;
+    }
+
+    function syncFromInput() {
+      var raw = hiddenInput.value || '';
+      var ids = new Set(raw.split(/[\s,]+/).map(function(s) { return s.trim(); }).filter(Boolean));
+      picker.querySelectorAll('.board-checkbox').forEach(function(cb) {
+        cb.checked = ids.has(String(cb.dataset.id));
+      });
+      pickedCount.textContent = String(ids.size);
+    }
+
+    search.addEventListener('input', function() {
+      var q = this.value.toLowerCase().trim();
+      picker.querySelectorAll('.board-row').forEach(function(row) {
+        row.style.display = !q || row.dataset.needle.indexOf(q) !== -1 ? '' : 'none';
+      });
+    });
+
+    picker.addEventListener('change', function(ev) {
+      if (ev.target && ev.target.classList.contains('board-checkbox')) syncFromPicker();
+    });
+
+    hiddenInput.addEventListener('input', syncFromInput);
+
+    pickedClear.addEventListener('click', function(ev) {
+      ev.preventDefault();
+      picker.querySelectorAll('.board-checkbox').forEach(function(cb) { cb.checked = false; });
+      syncFromPicker();
+    });
+
+    syncFromInput();
+  })();
+</script>

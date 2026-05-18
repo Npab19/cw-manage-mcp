@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { getSql } from '../db.js';
+import { getAllBoards, buildBoardNameMap } from '../composites/boards-cache.js';
 
 interface AliasRow {
   name: string;
@@ -32,7 +33,7 @@ function parseBoardIds(raw: string | undefined): number[] {
 export const aliasesGetHandler: RequestHandler = async (req, res, next) => {
   try {
     const sql = getSql();
-    const [aliases, deprecated] = await Promise.all([
+    const [aliases, deprecated, boards] = await Promise.all([
       sql<AliasRow[]>`
         SELECT name, description, category, board_ids, is_deprecated, created_by, updated_at
           FROM board_aliases
@@ -43,7 +44,9 @@ export const aliasesGetHandler: RequestHandler = async (req, res, next) => {
           FROM deprecated_boards
          ORDER BY board_id ASC
       `,
+      getAllBoards(),
     ]);
+    const boardNames = buildBoardNameMap(boards);
     // Group aliases by category for the rendered view.
     const byCategory = new Map<string, AliasRow[]>();
     for (const a of aliases) {
@@ -65,8 +68,9 @@ export const aliasesGetHandler: RequestHandler = async (req, res, next) => {
       aliases,
       categorized,
       deprecated,
+      boards,
+      boardNames,
       flash: typeof req.query.flash === 'string' ? req.query.flash : null,
-      bulkResult: null,
     });
   } catch (err) {
     next(err);
@@ -113,128 +117,6 @@ export const aliasCreateHandler: RequestHandler = async (req, res, next) => {
   }
 };
 
-interface BulkParseResult {
-  rows: Array<{
-    category: string | null;
-    name: string;
-    description: string | null;
-    boardIds: number[];
-  }>;
-  errors: Array<{ line: number; raw: string; message: string }>;
-}
-
-// Minimal CSV parse — handles a single "quoted, with, commas" field per
-// line. Format: category,name,description,board_ids
-function parseBulkCsv(input: string): BulkParseResult {
-  const result: BulkParseResult = { rows: [], errors: [] };
-  const lines = input.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i]!.trim();
-    if (!raw || raw.startsWith('#')) continue;
-    if (i === 0 && /^category\s*,/i.test(raw)) continue; // optional header
-    const fields = splitCsvLine(raw);
-    if (fields.length < 4) {
-      result.errors.push({ line: i + 1, raw, message: 'Expected 4 fields: category,name,description,board_ids' });
-      continue;
-    }
-    const [category, name, description, boardIdsRaw] = fields;
-    const ids = parseBoardIds(boardIdsRaw);
-    if (!name?.trim()) {
-      result.errors.push({ line: i + 1, raw, message: 'name is required' });
-      continue;
-    }
-    if (ids.length === 0) {
-      result.errors.push({ line: i + 1, raw, message: 'board_ids must list at least one positive integer' });
-      continue;
-    }
-    result.rows.push({
-      category: category?.trim() || null,
-      name: name.trim(),
-      description: description?.trim() || null,
-      boardIds: ids,
-    });
-  }
-  return result;
-}
-
-function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let buf = '';
-  let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-    if (inQuote) {
-      if (ch === '"' && line[i + 1] === '"') {
-        buf += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuote = false;
-      } else {
-        buf += ch;
-      }
-    } else if (ch === '"') {
-      inQuote = true;
-    } else if (ch === ',') {
-      out.push(buf);
-      buf = '';
-    } else {
-      buf += ch;
-    }
-  }
-  out.push(buf);
-  return out;
-}
-
-export const aliasBulkHandler: RequestHandler = async (req, res, next) => {
-  try {
-    const body = req.body as { csv?: string };
-    const csv = body.csv?.trim();
-    if (!csv) {
-      res.redirect(302, '/admin/aliases?flash=bulk-empty');
-      return;
-    }
-    const parsed = parseBulkCsv(csv);
-    if (parsed.rows.length === 0 && parsed.errors.length === 0) {
-      res.redirect(302, '/admin/aliases?flash=bulk-empty');
-      return;
-    }
-    const sql = getSql();
-    let added = 0;
-    let updated = 0;
-    for (const row of parsed.rows) {
-      const result = await sql<{ inserted: boolean }[]>`
-        INSERT INTO board_aliases (name, description, category, board_ids, created_by, updated_at)
-        VALUES (
-          ${row.name},
-          ${row.description},
-          ${row.category},
-          ${row.boardIds},
-          ${req.admin?.email ?? null},
-          now()
-        )
-        ON CONFLICT (name) DO UPDATE SET
-          description = EXCLUDED.description,
-          category = EXCLUDED.category,
-          board_ids = EXCLUDED.board_ids,
-          updated_at = now()
-        RETURNING (xmax = 0) AS inserted
-      `;
-      if (result[0]?.inserted) added++;
-      else updated++;
-    }
-    res.render('aliases', {
-      title: 'Board groups',
-      admin: req.admin,
-      aliases: [],
-      categorized: [],
-      deprecated: [],
-      flash: null,
-      bulkResult: { added, updated, errors: parsed.errors, total: parsed.rows.length },
-    });
-  } catch (err) {
-    next(err);
-  }
-};
 
 export const aliasDeleteHandler: RequestHandler = async (req, res, next) => {
   try {
