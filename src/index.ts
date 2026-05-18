@@ -32,6 +32,7 @@ import { requestContextMiddleware } from './middleware/request-context.js';
 import { auditCaptureMiddleware } from './middleware/audit-capture.js';
 import { identityResolverMiddleware, type ResolvedIdentity } from './middleware/identity-resolver.js';
 import { serviceAccountAuthMiddleware } from './middleware/service-account-auth.js';
+import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { gateServerWithPolicy } from './middleware/policy-gate.js';
 import { runMigrations } from './migrations/runner.js';
 import { pingDb } from './db.js';
@@ -156,9 +157,9 @@ app.get('/readyz', async (_req, res) => {
 
 registerOAuthRoutes(app);
 
-app.post('/mcp', serviceAccountAuthMiddleware, oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
-app.get('/mcp', serviceAccountAuthMiddleware, oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
-app.delete('/mcp', serviceAccountAuthMiddleware, oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, async (req, res) => handleMcpRequest(req, res));
+app.post('/mcp', serviceAccountAuthMiddleware, oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, rateLimitMiddleware, async (req, res) => handleMcpRequest(req, res, req.body));
+app.get('/mcp', serviceAccountAuthMiddleware, oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, rateLimitMiddleware, async (req, res) => handleMcpRequest(req, res));
+app.delete('/mcp', serviceAccountAuthMiddleware, oauthMiddleware, identityResolverMiddleware, auditCaptureMiddleware, rateLimitMiddleware, async (req, res) => handleMcpRequest(req, res));
 
 const port = parseInt(process.env.PORT ?? '3000', 10);
 
