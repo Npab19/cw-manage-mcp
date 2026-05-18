@@ -39,6 +39,8 @@ import { generateBootstrapCode } from './admin/auth.js';
 import { printBootstrapBanner } from './admin/setup.js';
 import { getSql } from './db.js';
 import { startCron } from './cron.js';
+import { registerContextResources } from './resources/context.js';
+import { seedGlobalContextIfMissing } from './bootstrap/context-seed.js';
 // @ts-expect-error -- express-ejs-layouts ships untyped, but it's a one-liner middleware.
 import expressLayouts from 'express-ejs-layouts';
 
@@ -66,6 +68,10 @@ function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null):
   webhookTools.register(gated, ctx);
   describeTool.register(gated, ctx);
   prompts.register(server);
+
+  // Context resources are not gated by the tool allow-list; access is
+  // enforced per-resource at read time via assertReadAccess().
+  registerContextResources(server, identity);
 
   return server;
 }
@@ -157,6 +163,7 @@ async function start(): Promise<void> {
     if (!bootstrap.required) {
       await assertOauthConfigured();
       await startCron();
+      await seedGlobalContextIfMissing();
     }
   } else {
     console.warn(

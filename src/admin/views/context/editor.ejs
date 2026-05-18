@@ -1,0 +1,65 @@
+<% if (flash === 'saved') { %>
+  <div class="flash success">New version saved.</div>
+<% } %>
+<% if (flash === 'rolledback') { %>
+  <div class="flash success">Rolled back — the prior version is now active (and added to history as a new version).</div>
+<% } %>
+
+<section class="card">
+  <p class="muted">
+    <a href="/admin/context">← All context</a>
+    <% if (scope === 'role') { %> · <a href="/admin/context/roles">Roles</a><% } %>
+    <% if (scope === 'user') { %> · <a href="/admin/context/users">Users</a><% } %>
+  </p>
+
+  <h1><%= scopeLabel %></h1>
+  <p class="muted">
+    MCP resource URI: <code><%= uri %></code>
+    <% if (doc) { %>
+       · Active <strong>v<%= doc.version %></strong>, updated <%= doc.updatedAt.toISOString() %><% if (doc.updatedBy) { %> by <%= doc.updatedBy %><% } %>
+    <% } else { %>
+       · <em>No active document yet.</em>
+    <% } %>
+  </p>
+
+  <form method="post" action="<%= saveAction %>">
+    <label for="markdown" style="display: block; margin-bottom: 4px;">Markdown</label>
+    <textarea id="markdown" name="markdown" rows="22" required
+              style="width: 100%; font-family: ui-monospace, monospace; font-size: 13px;"><%= doc ? doc.markdown : '' %></textarea>
+    <p style="margin-top: 12px;">
+      <input type="submit" value="Save as new version" />
+      <a class="button secondary" href="/admin/context">Cancel</a>
+    </p>
+  </form>
+</section>
+
+<% if (versions.length > 0) { %>
+  <section class="card">
+    <h2>Version history</h2>
+    <p class="muted">Active row is the most recent. Rollback inserts a copy of the chosen version as a new active version — history is append-only.</p>
+    <table>
+      <thead>
+        <tr><th>Version</th><th>Updated</th><th>By</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% for (const v of versions) { %>
+          <tr>
+            <td>v<%= v.version %></td>
+            <td><%= v.updatedAt.toISOString() %></td>
+            <td><%= v.updatedBy || '—' %></td>
+            <td><%= v.isActive ? '<strong>Active</strong>' : 'Historic' %></td>
+            <td>
+              <% if (!v.isActive) { %>
+                <form method="post" action="<%= rollbackActionBase %>/<%= v.id %>"
+                      onsubmit="return confirm('Roll back to v<%= v.version %>? Current active version becomes historic; a copy of v<%= v.version %> becomes the new active version.');"
+                      style="display: inline;">
+                  <button type="submit" class="button secondary">Roll back</button>
+                </form>
+              <% } %>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </section>
+<% } %>

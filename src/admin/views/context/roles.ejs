@@ -1,0 +1,27 @@
+<section class="card">
+  <p class="muted"><a href="/admin/context">← All context</a></p>
+  <h1>Per-role context</h1>
+  <p class="muted">One document per CW security role. Members of the role see this layer in their merged <code>context://current</code>.</p>
+
+  <table>
+    <thead>
+      <tr><th>Role</th><th>Active members</th><th>Document</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% for (const r of roles) { %>
+        <tr>
+          <td><%= r.role_name %></td>
+          <td><%= r.member_count %></td>
+          <td>
+            <% if (r.has_doc) { %>
+              v<%= r.version %> · <%= r.updated_at ? r.updated_at.toISOString().slice(0, 10) : '' %>
+            <% } else { %>
+              <span class="muted">none</span>
+            <% } %>
+          </td>
+          <td><a class="button secondary" href="/admin/context/roles/<%= encodeURIComponent(r.role_name) %>">Edit</a></td>
+        </tr>
+      <% } %>
+    </tbody>
+  </table>
+</section>

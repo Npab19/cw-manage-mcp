@@ -1,0 +1,45 @@
+<% if (flash === 'saved') { %>
+  <div class="flash success">Saved.</div>
+<% } %>
+<% if (flash === 'rolledback') { %>
+  <div class="flash success">Rolled back to selected version.</div>
+<% } %>
+
+<section class="card">
+  <h1>Context</h1>
+  <p class="muted">
+    Layered context documents exposed to MCP clients as <code>context://</code> resources. Composed per-caller:
+    <code>global</code> → <code>role</code> → <code>user</code>. More specific layers refine more general ones.
+  </p>
+
+  <ul style="list-style: none; padding: 0; display: grid; gap: 12px;">
+    <li>
+      <h2 style="margin: 8px 0;">Global</h2>
+      <p class="muted">One document, applies to every caller. Use it for boards/team facts, business rules, exclusion lists.</p>
+      <% if (global) { %>
+        <p>
+          Active version <strong>v<%= global.version %></strong>,
+          updated <%= global.updatedAt.toISOString() %><% if (global.updatedBy) { %> by <%= global.updatedBy %><% } %>.
+        </p>
+      <% } else { %>
+        <p class="muted">No global document yet.</p>
+      <% } %>
+      <p><a class="button" href="/admin/context/global">Edit global</a></p>
+    </li>
+    <li>
+      <h2 style="margin: 8px 0;">Per-role</h2>
+      <p class="muted">Specific to a CW security role. <%= roleCount %> role document(s) active.</p>
+      <p><a class="button" href="/admin/context/roles">Manage role context</a></p>
+    </li>
+    <li>
+      <h2 style="margin: 8px 0;">Per-user</h2>
+      <p class="muted">Specific to one imported member. <%= userCount %> user document(s) active.</p>
+      <p><a class="button" href="/admin/context/users">Manage user context</a></p>
+    </li>
+    <li>
+      <h2 style="margin: 8px 0;">Preview merged</h2>
+      <p class="muted">Render the composed <code>context://current</code> as it would appear to a specific user.</p>
+      <p><a class="button secondary" href="/admin/context/preview">Open preview</a></p>
+    </li>
+  </ul>
+</section>

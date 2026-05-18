@@ -32,6 +32,15 @@ import {
   permissionsUpdateHandler,
   permissionsResyncHandler,
 } from './permissions.js';
+import {
+  contextIndexHandler,
+  contextRolesListHandler,
+  contextUsersListHandler,
+  contextEditorHandler,
+  contextSaveHandler,
+  contextRollbackHandler,
+  contextPreviewHandler,
+} from './context.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -82,6 +91,22 @@ export function buildAdminRouter(): Router {
   router.get('/permissions/:roleId', permissionsEditHandler);
   router.post('/permissions/:roleId', permissionsUpdateHandler);
   router.post('/permissions/:roleId/resync', permissionsResyncHandler);
+
+  // Context: index + per-scope list/edit/save/rollback + preview.
+  // Route ordering matters: /preview must precede /:scope param matchers.
+  router.get('/context', contextIndexHandler);
+  router.get('/context/preview', contextPreviewHandler);
+  router.get('/context/roles', contextRolesListHandler);
+  router.get('/context/users', contextUsersListHandler);
+  router.get('/context/:scope(global)', contextEditorHandler);
+  router.post('/context/:scope(global)', contextSaveHandler);
+  router.post('/context/:scope(global)/rollback/:versionId', contextRollbackHandler);
+  router.get('/context/:scope(roles)/:roleName', contextEditorHandler);
+  router.post('/context/:scope(roles)/:roleName', contextSaveHandler);
+  router.post('/context/:scope(roles)/:roleName/rollback/:versionId', contextRollbackHandler);
+  router.get('/context/:scope(users)/:email', contextEditorHandler);
+  router.post('/context/:scope(users)/:email', contextSaveHandler);
+  router.post('/context/:scope(users)/:email/rollback/:versionId', contextRollbackHandler);
 
   return router;
 }
