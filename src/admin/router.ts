@@ -50,6 +50,7 @@ import {
 } from './aliases.js';
 import {
   exclusionsGetHandler,
+  exclusionsSearchHandler,
   exclusionAddHandler,
   exclusionDeleteHandler,
 } from './exclusions.js';
@@ -132,6 +133,7 @@ export function buildAdminRouter(): Router {
   router.post('/aliases/deprecated/:boardId/delete', deprecatedBoardDeleteHandler);
 
   router.get('/exclusions', exclusionsGetHandler);
+  router.get('/exclusions/search', exclusionsSearchHandler);
   router.post('/exclusions', exclusionAddHandler);
   router.post('/exclusions/:id/delete', exclusionDeleteHandler);
 

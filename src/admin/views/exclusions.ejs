@@ -50,39 +50,26 @@
 
   <h2 style="margin-top: 24px;">Exclude a company</h2>
 
-  <% if (companies.length === 0) { %>
-    <div class="flash error">Couldn't load the active CW company list. Check the CW connection on Settings. You can still enter a company ID directly below.</div>
-  <% } else if (companiesTruncated) { %>
-    <div class="flash">Loaded the first 5000 active companies. If the one you need isn't shown, refine the search or enter the ID manually.</div>
-  <% } %>
-
   <form method="post" action="/admin/exclusions" id="exclude-form">
-    <label>Search companies
-      <input type="text" id="company-search" placeholder="Type a name or identifier..." autocomplete="off"
-        <% if (companies.length === 0) { %>disabled<% } %> />
+    <label>Search CW
+      <input type="text" id="company-search" name="q"
+             hx-get="/admin/exclusions/search"
+             hx-trigger="input changed delay:300ms, search"
+             hx-target="#company-picker"
+             hx-swap="innerHTML"
+             hx-indicator="#search-indicator"
+             placeholder="Type at least 2 characters of a name or identifier..."
+             autocomplete="off" />
+      <span id="search-indicator" class="htmx-indicator muted" style="font-size: 12px; margin-left: 8px;">searching…</span>
     </label>
     <div id="company-picker" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 4px;">
-      <% if (companies.length === 0) { %>
-        <p class="muted" style="margin: 8px;">No companies loaded.</p>
-      <% } %>
-      <% for (const c of companies) { %>
-        <div class="company-row" role="button" tabindex="0"
-             data-needle="<%= (c.name + ' ' + c.identifier + ' ' + c.id).toLowerCase() %>"
-             data-id="<%= c.id %>"
-             data-identifier="<%= c.identifier %>"
-             data-name="<%= c.name %>"
-             style="padding: 4px 8px; cursor: pointer; font-size: 13px; border-radius: 3px;">
-          <%= c.name %>
-          <% if (c.identifier) { %><span class="muted">(<%= c.identifier %>)</span><% } %>
-          <span class="muted" style="margin-left: 6px;">#<%= c.id %></span>
-        </div>
-      <% } %>
+      <p class="muted" style="padding: 8px; margin: 0;">Start typing to search.</p>
     </div>
     <p class="muted" style="margin-top: 4px; font-size: 12px;">
       Selected: <strong id="company-selected">none</strong>
     </p>
 
-    <label>Company ID (auto-populated; edit only if you need to enter an ID not in the list)
+    <label>Company ID (auto-populated; edit only if you need to enter an ID not in the search)
       <input type="number" name="cw_company_id" id="company-id-input" required min="1" />
     </label>
     <input type="hidden" name="cw_company_identifier" id="company-identifier-input" />
@@ -97,9 +84,14 @@
   </form>
 </section>
 
+<style>
+  .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+  .htmx-request .htmx-indicator { opacity: 1; }
+  .htmx-request.htmx-indicator { opacity: 1; }
+</style>
+
 <script>
   (function() {
-    var search = document.getElementById('company-search');
     var picker = document.getElementById('company-picker');
     var idInput = document.getElementById('company-id-input');
     var identifierInput = document.getElementById('company-identifier-input');
@@ -122,15 +114,7 @@
       selectedLabel.textContent = row.dataset.name + ' (#' + row.dataset.id + ')';
     }
 
-    if (search) {
-      search.addEventListener('input', function() {
-        var q = this.value.toLowerCase().trim();
-        picker.querySelectorAll('.company-row').forEach(function(row) {
-          row.style.display = !q || row.dataset.needle.indexOf(q) !== -1 ? '' : 'none';
-        });
-      });
-    }
-
+    // Event delegation — works for htmx-swapped rows too.
     picker.addEventListener('click', function(ev) {
       var row = ev.target.closest('.company-row');
       if (row) selectRow(row);
@@ -142,8 +126,6 @@
       }
     });
 
-    // If the user types into the ID field directly, clear the highlight
-    // + selected-label so the UI doesn't lie.
     idInput.addEventListener('input', function() {
       clearHighlight();
       var id = idInput.value.trim();

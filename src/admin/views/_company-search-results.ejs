@@ -1,0 +1,18 @@
+<% if (rows.length === 0) { %>
+  <p class="muted" style="padding: 8px; margin: 0;">No matches.</p>
+<% } else { %>
+  <% for (const c of rows) { %>
+    <div class="company-row" role="button" tabindex="0"
+         data-id="<%= c.id %>"
+         data-identifier="<%= c.identifier %>"
+         data-name="<%= c.name %>"
+         style="padding: 4px 8px; cursor: pointer; font-size: 13px; border-radius: 3px;">
+      <%= c.name %>
+      <% if (c.identifier) { %><span class="muted">(<%= c.identifier %>)</span><% } %>
+      <span class="muted" style="margin-left: 6px;">#<%= c.id %></span>
+      <% if (c.status && c.status !== 'Active') { %>
+        <span class="muted" style="margin-left: 6px;">[<%= c.status.toLowerCase() %>]</span>
+      <% } %>
+    </div>
+  <% } %>
+<% } %>
