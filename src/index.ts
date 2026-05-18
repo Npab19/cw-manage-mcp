@@ -47,11 +47,24 @@ import expressLayouts from 'express-ejs-layouts';
 
 const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
 
+const SERVER_INSTRUCTIONS = [
+  'This MCP server exposes ConnectWise Manage (CW) data — service tickets, companies, agreements, time entries, projects, members, schedule, sales, expense, procurement, marketing, and composite reporting tools.',
+  '',
+  'Before answering questions about CW data, call the `get_context` tool once to load org-specific context (which boards are active vs deprecated, who is on the team, business rules, integration accounts to ignore in reports, query patterns, common misunderstandings). The context is composed per-caller from global, role-specific, and user-specific layers.',
+  '',
+  'Hosts that support MCP resources can read the same content from the `context://current` resource (or the layered `context://global`, `context://role/<name>`, `context://user/<email>` URIs).',
+].join('\n');
+
 function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null): McpServer {
-  const server = new McpServer({
-    name: 'cw-manage-mcp',
-    version: '1.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'cw-manage-mcp',
+      version: '1.0.0',
+    },
+    {
+      instructions: SERVER_INSTRUCTIONS,
+    },
+  );
   const gated = gateServerWithPolicy(server, identity);
 
   serviceTools.register(gated, ctx);
