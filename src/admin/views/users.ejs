@@ -62,14 +62,18 @@
 </section>
 
 <section class="card">
-  <h2>CW members</h2>
+  <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+    <h2 style="margin: 0;">CW members</h2>
+    <form method="get" action="/admin/users" style="margin: 0;">
+      <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+        <input type="checkbox" name="showApi" value="1" onchange="this.form.submit()" <%= showApi ? 'checked' : '' %> />
+        Show API/integration accounts
+      </label>
+    </form>
+  </div>
   <p class="muted">
     <%= members.length %> member(s) listed (capped at 5000).
-    <% if (showApi) { %>
-      Showing API/integration accounts too — <a href="/admin/users">hide them</a>.
-    <% } else { %>
-      API/integration members are hidden — <a href="/admin/users?showApi=1">show them</a>.
-    <% } %>
+    <% if (!showApi) { %> API/integration accounts hidden by default.<% } %>
   </p>
   <table>
     <thead>
