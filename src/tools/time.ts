@@ -4,6 +4,7 @@ import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
 import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
 import { cwFetchListWithExclusions } from '../composites/company-exclusions.js';
+import { cachedCwFetch } from '../cache/static-lookups.js';
 
 const pag: Schema = buildPaginationSchema('time-entry');
 
@@ -32,11 +33,11 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/time/sheets/${args.id}`, { fields: args.fields })));
 
   addTool(server, 'get_work_roles', 'List work roles (billing rate categories for time entries).', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/time/workRoles', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/time/workRoles', args)));
 
   addTool(server, 'get_work_types', 'List work types (e.g. Regular, Overtime) used to classify time entries.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/time/workTypes', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/time/workTypes', args)));
 
   addTool(server, 'get_charge_codes', 'List charge codes used to categorize time entries.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/time/chargeCodes', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/time/chargeCodes', args)));
 }

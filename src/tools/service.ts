@@ -4,6 +4,7 @@ import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
 import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
 import { cwFetchListWithExclusions } from '../composites/company-exclusions.js';
+import { cachedCwFetch } from '../cache/static-lookups.js';
 
 const pag: Schema = buildPaginationSchema('ticket');
 
@@ -36,19 +37,19 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/tickets/${args.id}/tasks`, args)));
 
   addTool(server, 'get_service_boards', 'List service boards (queues) in ConnectWise Manage.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/boards', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/boards', args)));
 
   addTool(server, 'get_service_board_statuses', 'List statuses configured on a specific service board.', withBoardId,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/statuses`, args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, `/service/boards/${args.id}/statuses`, args)));
 
   addTool(server, 'get_service_priorities', 'List ticket priority levels.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/priorities', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/priorities', args)));
 
   addTool(server, 'get_service_slas', 'List Service Level Agreements (SLAs).', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/SLAs', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/SLAs', args)));
 
   addTool(server, 'get_service_impacts', 'List ticket impact levels.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/impacts', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/impacts', args)));
 
   // ── Ticket count ────────────────────────────────────────────────────
   addTool(server, 'get_service_ticket_count', 'Get total count of service tickets matching a filter (returns a number, not records).', listSchema,
@@ -70,23 +71,23 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
 
   // ── Sources & Severities ────────────────────────────────────────────
   addTool(server, 'get_service_sources', 'List ticket sources (email, phone, portal, etc.).', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/sources', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/sources', args)));
 
   addTool(server, 'get_service_severities', 'List ticket severity levels.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/severities', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/severities', args)));
 
   addTool(server, 'get_service_teams', 'List service teams.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/teams', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/teams', args)));
 
   // ── Board sub-resources ─────────────────────────────────────────────
   addTool(server, 'get_service_board_types', 'List ticket type definitions on a specific service board.', withBoardId,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/types`, args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, `/service/boards/${args.id}/types`, args)));
 
   addTool(server, 'get_service_board_subtypes', 'List ticket subtype definitions on a specific service board.', withBoardId,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/subtypes`, args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, `/service/boards/${args.id}/subtypes`, args)));
 
   addTool(server, 'get_service_board_teams', 'List teams assigned to a specific service board.', withBoardId,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/boards/${args.id}/teams`, args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, `/service/boards/${args.id}/teams`, args)));
 
   // ── Knowledge Base ──────────────────────────────────────────────────
   addTool(server, 'get_knowledge_base_articles', 'List knowledge base articles. Use conditions to search by title or content.', listSchema,
@@ -96,10 +97,10 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/knowledgeBaseArticles/${args.id}`, { fields: args.fields })));
 
   addTool(server, 'get_knowledge_base_categories', 'List knowledge base categories.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/knowledgeBaseCategories', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/knowledgeBaseCategories', args)));
 
   addTool(server, 'get_knowledge_base_subcategories', 'List knowledge base subcategories.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/knowledgeBaseSubCategories', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/service/knowledgeBaseSubCategories', args)));
 
   // ── Surveys ─────────────────────────────────────────────────────────
   const withSurveyId: Schema = { id: z.number().int().describe('Survey ID'), ...pag };

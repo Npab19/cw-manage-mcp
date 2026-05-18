@@ -4,6 +4,7 @@ import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
 import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
 import { cwFetchListWithExclusions } from '../composites/company-exclusions.js';
+import { cachedCwFetch } from '../cache/static-lookups.js';
 
 const pag: Schema = buildPaginationSchema('agreement');
 
@@ -38,5 +39,5 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/finance/agreementRecap', args)));
 
   addTool(server, 'get_agreement_types', 'List agreement type definitions.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/finance/agreementTypes', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/finance/agreementTypes', args)));
 }

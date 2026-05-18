@@ -4,6 +4,7 @@ import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
 import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
 import { cwFetchListWithExclusions } from '../composites/company-exclusions.js';
+import { cachedCwFetch } from '../cache/static-lookups.js';
 
 const pag: Schema = buildPaginationSchema('project');
 
@@ -38,5 +39,5 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/project/projects/${args.id}/notes`, args)));
 
   addTool(server, 'get_project_statuses', 'List project status definitions.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/project/statuses', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/project/statuses', args)));
 }

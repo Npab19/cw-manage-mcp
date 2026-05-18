@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
 import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
+import { cachedCwFetch } from '../cache/static-lookups.js';
 
 const pag: Schema = buildPaginationSchema('member');
 
@@ -21,7 +22,7 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/system/members/${args.id}/skills`, args)));
 
   addTool(server, 'get_departments', 'List organizational departments.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/system/departments', args)));
+    (args) => handleToolCall(ctx, (c) => cachedCwFetch(c, '/system/departments', args)));
 
   addTool(server, 'get_audit_trail', 'Retrieve the audit trail (activity log). Always pass `conditions` to filter — this can return tens of thousands of records. Filter by record type/ID, e.g. `type=\'Ticket\' AND auditTargetId=12345`. Pass `fields` to project only what you need.', listSchema,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, '/system/auditTrail', args)));
