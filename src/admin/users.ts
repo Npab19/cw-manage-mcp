@@ -9,6 +9,7 @@ interface MemberRow {
   last_name: string | null;
   primary_email: string | null;
   security_role_name: string | null;
+  member_type: string | null;
   inactive_flag: boolean;
   mapped_oauth_email: string | null;
   mapped_oauth_sub: string | null;
@@ -25,6 +26,7 @@ interface UnmappedIdentityRow {
 export const usersGetHandler: RequestHandler = async (req, res, next) => {
   try {
     const sql = getSql();
+    const showApi = req.query.showApi === '1';
     const [members, unmapped, lastRun] = await Promise.all([
       sql<MemberRow[]>`
         SELECT
@@ -34,6 +36,7 @@ export const usersGetHandler: RequestHandler = async (req, res, next) => {
           m.last_name,
           m.primary_email,
           m.security_role_name,
+          m.member_type,
           m.inactive_flag,
           oi.email AS mapped_oauth_email,
           um.oauth_sub AS mapped_oauth_sub,
@@ -41,8 +44,9 @@ export const usersGetHandler: RequestHandler = async (req, res, next) => {
         FROM cw_members m
         LEFT JOIN user_mappings um ON um.cw_member_id = m.id
         LEFT JOIN oauth_identities oi ON oi.sub = um.oauth_sub
+        WHERE ${showApi ? sql`TRUE` : sql`(m.member_type IS NULL OR m.member_type <> 'API')`}
         ORDER BY m.inactive_flag ASC, m.last_name ASC, m.first_name ASC
-        LIMIT 500
+        LIMIT 5000
       `,
       sql<UnmappedIdentityRow[]>`
         SELECT oi.sub, oi.email, oi.first_seen, oi.last_seen
@@ -60,6 +64,7 @@ export const usersGetHandler: RequestHandler = async (req, res, next) => {
       members,
       unmapped,
       lastRun,
+      showApi,
       flash: typeof req.query.flash === 'string' ? req.query.flash : null,
     });
   } catch (err) {

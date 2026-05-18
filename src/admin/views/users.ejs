@@ -63,7 +63,14 @@
 
 <section class="card">
   <h2>CW members</h2>
-  <p class="muted"><%= members.length %> member(s) listed (capped at 500).</p>
+  <p class="muted">
+    <%= members.length %> member(s) listed (capped at 5000).
+    <% if (showApi) { %>
+      Showing API/integration accounts too — <a href="/admin/users">hide them</a>.
+    <% } else { %>
+      API/integration members are hidden — <a href="/admin/users?showApi=1">show them</a>.
+    <% } %>
+  </p>
   <table>
     <thead>
       <tr>
@@ -71,6 +78,7 @@
         <th>Name</th>
         <th>Email</th>
         <th>Role</th>
+        <th>Type</th>
         <th>Mapping</th>
         <th>Status</th>
         <th></th>
@@ -83,6 +91,7 @@
           <td><%= m.first_name || '' %> <%= m.last_name || '' %></td>
           <td><%= m.primary_email || '' %></td>
           <td><%= m.security_role_name || '' %></td>
+          <td><%= m.member_type || '' %></td>
           <td>
             <% if (m.mapped_oauth_email) { %>
               <%= m.mapped_oauth_email %>

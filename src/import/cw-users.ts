@@ -12,6 +12,7 @@ interface CwMemberRaw {
   primaryEmail?: string;
   officeEmail?: string;
   securityRole?: { id?: number; name?: string };
+  type?: { id?: number; name?: string };
   inactiveFlag?: boolean;
 }
 
@@ -48,33 +49,51 @@ async function fetchAllMembers(ctx: CwRequestContext): Promise<CwMemberRaw[]> {
   return out;
 }
 
-async function fetchSecurityRoles(ctx: CwRequestContext): Promise<CwSecurityRoleRaw[]> {
+async function fetchSecurityRoles(
+  ctx: CwRequestContext,
+  errors: UserImportResult['errors'],
+): Promise<CwSecurityRoleRaw[]> {
   try {
-    const result = await cwFetch<CwSecurityRoleRaw[]>(ctx, '/system/security_roles', {
+    const result = await cwFetch<CwSecurityRoleRaw[]>(ctx, '/system/securityRoles', {
       pageSize: 200,
     });
     return Array.isArray(result.data) ? result.data : [];
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[import] /system/securityRoles failed: ${message}`);
+    errors.push({ phase: 'fetch:securityRoles', message });
     return [];
   }
 }
 
-async function fetchRolePermissions(ctx: CwRequestContext, roleId: number): Promise<string[]> {
+async function fetchRolePermissions(
+  ctx: CwRequestContext,
+  roleId: number,
+  errors: UserImportResult['errors'],
+): Promise<string[]> {
   try {
-    const result = await cwFetch<unknown>(ctx, `/system/security_roles/${roleId}/permissions`);
+    const result = await cwFetch<unknown>(
+      ctx,
+      `/system/securityRoles/${roleId}/permissions`,
+    );
     if (!Array.isArray(result.data)) return [];
     const modules: string[] = [];
     for (const row of result.data as Array<Record<string, unknown>>) {
+      const moduleObj = row.module as { name?: unknown } | undefined;
       const moduleName =
-        typeof row.moduleName === 'string'
-          ? row.moduleName
-          : typeof row.permission === 'string'
-            ? row.permission
-            : null;
+        typeof moduleObj?.name === 'string'
+          ? moduleObj.name
+          : typeof row.moduleName === 'string'
+            ? row.moduleName
+            : typeof row.permission === 'string'
+              ? row.permission
+              : null;
       if (moduleName) modules.push(moduleName);
     }
     return modules;
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    errors.push({ phase: `permissions:role:${roleId}`, message });
     return [];
   }
 }
@@ -99,10 +118,10 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
   let roles: CwSecurityRoleRaw[] = [];
 
   try {
-    [members, roles] = await Promise.all([fetchAllMembers(ctx), fetchSecurityRoles(ctx)]);
+    members = await fetchAllMembers(ctx);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    errors.push({ phase: 'fetch', message });
+    errors.push({ phase: 'fetch:members', message });
     await sql`
       UPDATE user_import_runs
         SET status = 'error', completed_at = now(), errors = ${sql.json(errors as never)}
@@ -110,6 +129,10 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
     `;
     return { runId, status: 'error', rowsAdded: 0, rowsUpdated: 0, rowsDeactivated: 0, errors };
   }
+
+  // /system/securityRoles isn't fatal — if it fails, fall back to seeding
+  // roles from the security_role_id values we actually saw on members.
+  roles = await fetchSecurityRoles(ctx, errors);
 
   // Upsert members. Track which IDs we saw so we can deactivate the rest.
   const seenIds = new Set<number>();
@@ -119,10 +142,11 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
   for (const m of members) {
     if (!m?.id) continue;
     seenIds.add(m.id);
+    const memberType = typeof m.type?.name === 'string' ? m.type.name : null;
     const result = await sql<{ inserted: boolean }[]>`
       INSERT INTO cw_members (
         id, identifier, first_name, last_name, primary_email, office_email,
-        security_role_id, security_role_name, inactive_flag, raw, updated_at
+        security_role_id, security_role_name, member_type, inactive_flag, raw, updated_at
       ) VALUES (
         ${m.id},
         ${m.identifier ?? ''},
@@ -132,6 +156,7 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
         ${m.officeEmail ?? null},
         ${m.securityRole?.id ?? null},
         ${m.securityRole?.name ?? null},
+        ${memberType},
         ${m.inactiveFlag ?? false},
         ${sql.json(m as never)},
         now()
@@ -144,6 +169,7 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
         office_email = EXCLUDED.office_email,
         security_role_id = EXCLUDED.security_role_id,
         security_role_name = EXCLUDED.security_role_name,
+        member_type = EXCLUDED.member_type,
         inactive_flag = EXCLUDED.inactive_flag,
         raw = EXCLUDED.raw,
         updated_at = now()
@@ -166,23 +192,37 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
     rowsDeactivated = deactivated.length;
   }
 
-  // Seed permission_policies for new roles. Existing rows with
-  // auto_derived=false are left alone; auto_derived=true rows refresh.
+  // Build the role set we want to seed. Prefer the /securityRoles
+  // response (gives us names), but fall back to whatever role IDs we
+  // saw on members (with the name we captured on the member row) so a
+  // failed /securityRoles fetch doesn't block policy seeding.
+  const roleMap = new Map<number, string>();
+  for (const r of roles) {
+    if (r?.id != null) roleMap.set(r.id, r.name ?? `Role ${r.id}`);
+  }
+  for (const m of members) {
+    const id = m?.securityRole?.id;
+    if (id != null && !roleMap.has(id)) {
+      roleMap.set(id, m.securityRole?.name ?? `Role ${id}`);
+    }
+  }
+
+  // Seed permission_policies. auto_derived=false rows are admin-curated
+  // and left alone.
   const existing = await sql<{ role_id: string; auto_derived: boolean }[]>`
     SELECT role_id::text AS role_id, auto_derived FROM permission_policies
   `;
   const autoDerivedByRoleId = new Map(existing.map((r) => [r.role_id, r.auto_derived]));
 
-  for (const role of roles) {
-    if (!role?.id) continue;
-    const existingAuto = autoDerivedByRoleId.get(String(role.id));
-    if (existingAuto === false) continue; // admin-curated, hands off
+  for (const [roleId, roleName] of roleMap) {
+    const existingAuto = autoDerivedByRoleId.get(String(roleId));
+    if (existingAuto === false) continue;
+    const modules = await fetchRolePermissions(ctx, roleId, errors);
+    const allowed = modules.length > 0 ? deriveAllowedTools(modules) : defaultSeedAllowedTools();
     try {
-      const modules = await fetchRolePermissions(ctx, role.id);
-      const allowed = modules.length > 0 ? deriveAllowedTools(modules) : defaultSeedAllowedTools();
       await sql`
         INSERT INTO permission_policies (role_id, role_name, allowed_tools, auto_derived, updated_at)
-        VALUES (${role.id}, ${role.name}, ${allowed}, TRUE, now())
+        VALUES (${roleId}, ${roleName}, ${allowed}, TRUE, now())
         ON CONFLICT (role_id) DO UPDATE SET
           role_name = EXCLUDED.role_name,
           allowed_tools = EXCLUDED.allowed_tools,
@@ -191,7 +231,7 @@ export async function runUserImport(triggeredBy: string): Promise<UserImportResu
       `;
     } catch (err) {
       errors.push({
-        phase: `permissions:role:${role.id}`,
+        phase: `policy:upsert:${roleId}`,
         message: err instanceof Error ? err.message : String(err),
       });
     }
