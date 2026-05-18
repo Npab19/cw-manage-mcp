@@ -1,0 +1,71 @@
+<% if (flash === 'added') { %>
+  <div class="flash success">Exclusion added.</div>
+<% } else if (flash === 'removed') { %>
+  <div class="flash success">Exclusion removed.</div>
+<% } else if (flash === 'missing') { %>
+  <div class="flash error">Company ID (positive integer) and reason are required.</div>
+<% } %>
+
+<section class="card">
+  <h1>Excluded companies</h1>
+  <p class="muted">
+    Companies on this list are silently filtered out of <code>get_companies</code>,
+    <code>get_service_tickets</code>, <code>get_agreements</code>, <code>get_opportunities</code>,
+    <code>get_time_entries</code>, and <code>get_projects</code>. Callers can override per call
+    with <code>include_excluded: true</code>. Audit-log entries still capture every call;
+    exclusions only shape the response.
+  </p>
+
+  <% if (exclusions.length === 0) { %>
+    <p class="muted">No exclusions yet.</p>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Company ID</th>
+          <th>Identifier</th>
+          <th>Name</th>
+          <th>Reason</th>
+          <th>Added</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const e of exclusions) { %>
+          <tr>
+            <td><%= e.cw_company_id %></td>
+            <td><%= e.cw_company_identifier || '' %></td>
+            <td><%= e.cw_company_name || '' %></td>
+            <td><%= e.reason %></td>
+            <td><%= e.added_at.toISOString() %> by <%= e.added_by %></td>
+            <td>
+              <form method="post" action="/admin/exclusions/<%= e.cw_company_id %>/delete" style="display: inline;"
+                onsubmit="return confirm('Remove exclusion for company <%= e.cw_company_id %>?');">
+                <button type="submit" class="button secondary">Un-exclude</button>
+              </form>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+
+  <h2 style="margin-top: 24px;">Exclude a company</h2>
+  <form method="post" action="/admin/exclusions">
+    <label>CW company ID
+      <input type="number" name="cw_company_id" required min="1" />
+    </label>
+    <label>Company identifier (optional, for display)
+      <input type="text" name="cw_company_identifier" placeholder="ACME" />
+    </label>
+    <label>Company name (optional, for display)
+      <input type="text" name="cw_company_name" placeholder="Acme Corp" />
+    </label>
+    <label>Reason
+      <input type="text" name="reason" required placeholder="Why is this company being excluded?" />
+    </label>
+    <p style="margin-top: 16px;">
+      <input type="submit" value="Add exclusion" />
+    </p>
+  </form>
+</section>

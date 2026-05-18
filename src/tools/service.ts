@@ -3,17 +3,25 @@ import { z } from 'zod';
 import { cwFetch, handleToolCall } from '../client.js';
 import { CwRequestContext } from '../types.js';
 import { addTool, Schema, buildPaginationSchema, idSchema } from './helper.js';
+import { cwFetchListWithExclusions } from '../composites/company-exclusions.js';
 
 const pag: Schema = buildPaginationSchema('ticket');
 
 const listSchema: Schema = { ...pag };
+const ticketListSchema: Schema = {
+  ...pag,
+  include_excluded: z
+    .boolean()
+    .optional()
+    .describe('When true, include tickets for globally-excluded companies. Default false.'),
+};
 const withTicketId: Schema = { id: idSchema('Ticket ID'), ...pag };
 const withBoardId: Schema = { id: idSchema('Board ID'), ...pag };
 const byId: Schema = { id: idSchema('Ticket ID'), fields: z.string().optional().describe('Fields to return') };
 
 export function register(server: McpServer, ctx: CwRequestContext): void {
-  addTool(server, 'get_service_tickets', 'Default tool for ticket questions. Use `conditions` to scope the result set. Examples: `closedFlag=false` for open tickets, `priority/id<=2` for high-priority, `board/id=N` to scope to a board, `lastUpdated>[2024-01-01T00:00:00Z]` for recently-touched. Pass `fields="id,summary,status,..."` to project only what you need — keeps responses small and fast.', listSchema,
-    (args) => handleToolCall(ctx, (c) => cwFetch(c, '/service/tickets', args)));
+  addTool(server, 'get_service_tickets', 'Default tool for ticket questions. Use `conditions` to scope the result set. Examples: `closedFlag=false` for open tickets, `priority/id<=2` for high-priority, `board/id=N` to scope to a board, `lastUpdated>[2024-01-01T00:00:00Z]` for recently-touched. Pass `fields="id,summary,status,..."` to project only what you need — keeps responses small and fast. Tickets for globally-excluded companies are hidden by default; pass `include_excluded: true` to override.', ticketListSchema,
+    (args) => handleToolCall(ctx, (c) => cwFetchListWithExclusions(c, '/service/tickets', args, { conditionsField: 'company/id', resultIdPath: 'company.id' })));
 
   addTool(server, 'get_service_ticket_by_id', 'Retrieve a single service ticket by its ID.', byId,
     (args) => handleToolCall(ctx, (c) => cwFetch(c, `/service/tickets/${args.id}`, { fields: args.fields })));

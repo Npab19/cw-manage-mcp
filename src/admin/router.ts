@@ -48,6 +48,11 @@ import {
   deprecatedBoardAddHandler,
   deprecatedBoardDeleteHandler,
 } from './aliases.js';
+import {
+  exclusionsGetHandler,
+  exclusionAddHandler,
+  exclusionDeleteHandler,
+} from './exclusions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const ADMIN_DIR = path.dirname(__filename);
@@ -120,6 +125,10 @@ export function buildAdminRouter(): Router {
   router.post('/aliases/:name/delete', aliasDeleteHandler);
   router.post('/aliases/deprecated', deprecatedBoardAddHandler);
   router.post('/aliases/deprecated/:boardId/delete', deprecatedBoardDeleteHandler);
+
+  router.get('/exclusions', exclusionsGetHandler);
+  router.post('/exclusions', exclusionAddHandler);
+  router.post('/exclusions/:id/delete', exclusionDeleteHandler);
 
   return router;
 }
