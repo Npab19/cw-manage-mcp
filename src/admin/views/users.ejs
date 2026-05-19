@@ -40,6 +40,7 @@
     <p class="muted">All seen identities are mapped to a CW member.</p>
   <% } else { %>
     <p class="muted">These users have signed in via OAuth but don't match any CW member's primary email. Link them manually to grant tool access.</p>
+    <div class="table-scroll">
     <table>
       <thead><tr><th>Email</th><th>Subject (sub)</th><th>Last seen</th><th>Link to CW member</th></tr></thead>
       <tbody>
@@ -66,6 +67,7 @@
         <% } %>
       </tbody>
     </table>
+    </div>
   <% } %>
 </section>
 
@@ -83,6 +85,7 @@
     <%= members.length %> member(s) listed (capped at 5000).
     <% if (!showApi) { %> API/integration accounts hidden by default.<% } %>
   </p>
+  <div class="table-scroll">
   <table>
     <thead>
       <tr>
@@ -153,6 +156,7 @@
       <% } %>
     </tbody>
   </table>
+  </div>
 </section>
 
 <section class="card">
@@ -164,6 +168,7 @@
   <% if (adminAssignments.length === 0) { %>
     <p class="muted">No DB-managed admin assignments yet.</p>
   <% } else { %>
+    <div class="table-scroll">
     <table>
       <thead><tr><th>Email</th><th>Granted</th><th>Revoked</th></tr></thead>
       <tbody>
@@ -182,5 +187,6 @@
         <% } %>
       </tbody>
     </table>
+    </div>
   <% } %>
 </section>

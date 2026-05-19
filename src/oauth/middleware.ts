@@ -10,6 +10,19 @@ export function isOAuthConfigured(): boolean {
   return !!process.env.OAUTH_ISSUER;
 }
 
+/**
+ * Async equivalent: true when either the env vars are set OR the wizard
+ * stored an oauth_provider row in dashboard_settings. Used by per-request
+ * middleware so a wizard-only configuration (env unset) still enforces
+ * Bearer auth. `getOauthProvider()` is cached in config.ts (30s TTL), so
+ * this is a cheap call on the hot path.
+ */
+async function isOAuthConfiguredAsync(): Promise<boolean> {
+  if (isOAuthConfigured()) return true;
+  const provider = await getOauthProvider();
+  return provider !== null;
+}
+
 let jwksGetter: ReturnType<typeof createLocalJWKSet> | null = null;
 async function getJwks() {
   if (jwksGetter) return jwksGetter;
@@ -41,7 +54,7 @@ async function getAllowedDomains(): Promise<string[]> {
 }
 
 export const oauthMiddleware: RequestHandler = async (req, res, next) => {
-  if (!isOAuthConfigured()) return next();
+  if (!(await isOAuthConfiguredAsync())) return next();
   // Service-account auth (if applicable) already populated req.identity.
   if (req.identity) return next();
 

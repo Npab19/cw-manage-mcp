@@ -47,7 +47,12 @@ import { seedGlobalContextIfMissing } from './bootstrap/context-seed.js';
 // @ts-expect-error -- express-ejs-layouts ships untyped, but it's a one-liner middleware.
 import expressLayouts from 'express-ejs-layouts';
 
-const required = ['CW_CLIENT_ID', 'CW_BASE_URL', 'CW_CODEBASE'] as const;
+// CW credentials (CW_CLIENT_ID, CW_BASE_URL, CW_CODEBASE, CW_COMPANY_ID,
+// CW_PUBLIC_KEY, CW_PRIVATE_KEY) and OAuth provider settings are collected
+// by the /admin/setup wizard at first run and stored in the DB. Env vars
+// are used only as wizard pre-fills + fallback for unset DB rows, so the
+// container must boot without them.
+const required: readonly string[] = [];
 
 const SERVER_INSTRUCTIONS = [
   'This MCP server exposes ConnectWise Manage (CW) data — service tickets, companies, agreements, time entries, projects, members, schedule, sales, expense, procurement, marketing, and composite reporting tools.',
@@ -128,6 +133,10 @@ app.set('views', ADMIN_VIEWS_DIR);
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
+// Asset cache-buster — changes on every process start, so Cloudflare/
+// browser caches of /admin/static/* are bypassed across deploys.
+app.locals.assetVersion = Date.now().toString(36);
+
 app.use('/admin', buildAdminRouter());
 
 app.get('/healthz', (_req, res) => {
@@ -195,7 +204,9 @@ async function start(): Promise<void> {
 
   app.listen(port, () => {
     console.log(`CW Manage MCP server listening on http://localhost:${port}/mcp`);
-    console.log(`Base URL: ${process.env.CW_BASE_URL}/${process.env.CW_CODEBASE}/apis/3.0`);
+    if (process.env.CW_BASE_URL && process.env.CW_CODEBASE) {
+      console.log(`Base URL: ${process.env.CW_BASE_URL}/${process.env.CW_CODEBASE}/apis/3.0`);
+    }
     if (isOAuthConfigured()) {
       console.log(`OAuth metadata: ${process.env.PUBLIC_BASE_URL}${PROTECTED_RESOURCE_METADATA_PATH}`);
     }

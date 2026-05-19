@@ -2,13 +2,16 @@ import type { RequestHandler } from 'express';
 import { getJwksDoc } from './keys.js';
 import { getPublicBaseUrl } from './base-url.js';
 import { isOAuthConfigured } from './middleware.js';
+import { getOauthProvider } from '../config.js';
 
 export const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
 export const AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-authorization-server';
 export const JWKS_PATH = '/.well-known/jwks.json';
 
-export const protectedResourceMetadataHandler: RequestHandler = (req, res) => {
-  if (!isOAuthConfigured()) {
+export const protectedResourceMetadataHandler: RequestHandler = async (req, res) => {
+  // Accept either env (OAUTH_ISSUER) or wizard-stored config — both
+  // represent a configured OAuth provider.
+  if (!isOAuthConfigured() && !(await getOauthProvider())) {
     res.status(404).json({ error: 'OAuth not configured on this server' });
     return;
   }
