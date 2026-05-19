@@ -84,6 +84,8 @@ pre { padding: 12px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 th { background: var(--bg); }
+.table-scroll { width: 100%; overflow-x: auto; }
+.table-scroll > table { min-width: max-content; }
 .muted { color: var(--muted); }
 .flash { padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; }
 .flash.success { background: #dafbe1; color: #0a3622; }

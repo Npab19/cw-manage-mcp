@@ -1,32 +1,32 @@
+# Shared Postgres connection details — referenced by services below via YAML anchors.
+# Single source of truth for credentials inside the compose network.
+x-postgres-creds: &postgres-creds
+  POSTGRES_HOST: postgres
+  POSTGRES_DB: cw_mcp_dashboard
+  POSTGRES_USER: cw_mcp
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
 services:
   cw-manage-mcp:
-    build: .
+    # Pre-built image from GitHub Container Registry. To build locally,
+    # comment out `image:` and uncomment `build: .`.
+    image: ghcr.io/npab19/cw-manage-mcp:latest
+    # build: .
     expose:
       - "3000"
+    # All CW_*, OAUTH_*, PUBLIC_BASE_URL, ADMIN_EMAILS, etc. are loaded from .env
+    # automatically. Only container-internal paths and the assembled DATABASE_URL
+    # are declared inline below.
+    env_file:
+      - .env
     environment:
-      - CW_CLIENT_ID=${CW_CLIENT_ID}
-      - CW_BASE_URL=${CW_BASE_URL}
-      - CW_CODEBASE=${CW_CODEBASE}
-      - PORT=3000
-      - OAUTH_ISSUER=${OAUTH_ISSUER}
-      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}
-      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
-      - OAUTH_ALLOWED_EMAIL_DOMAINS=${OAUTH_ALLOWED_EMAIL_DOMAINS}
-      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
-      - OAUTH_KEY_FILE=/data/oauth-keys.json
-      - CW_COMPANY_ID=${CW_COMPANY_ID}
-      - CW_PUBLIC_KEY=${CW_PUBLIC_KEY}
-      - CW_PRIVATE_KEY=${CW_PRIVATE_KEY}
-      - DATABASE_URL=postgres://cw_mcp:${POSTGRES_PASSWORD}@postgres:5432/cw_mcp_dashboard
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=cw_mcp
-      - POSTGRES_DB=cw_mcp_dashboard
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - BACKUP_PATH=/backups
+      <<: *postgres-creds
+      DATABASE_URL: postgres://cw_mcp:${POSTGRES_PASSWORD}@postgres:5432/cw_mcp_dashboard
+      OAUTH_KEY_FILE: /data/oauth-keys.json
+      BACKUP_PATH: /backups
     volumes:
       - oauth-keys:/data
-      - postgres-backups:/backups
-      - ./scripts/pg-backup.sh:/pg-backup.sh:ro
+      - postgres-backups:/backups:ro      # read-only; dashboard lists/downloads dumps
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
       interval: 30s
@@ -41,9 +41,7 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=cw_mcp_dashboard
-      - POSTGRES_USER=cw_mcp
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      <<: *postgres-creds
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -58,23 +56,31 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      <<: *postgres-creds
+      BACKUP_PATH: /backups
+      BACKUP_RETENTION_DAYS: 30
     volumes:
       - postgres-backups:/backups
-      - ./scripts/pg-backup.sh:/pg-backup.sh:ro
-    environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=cw_mcp
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=cw_mcp_dashboard
-      - BACKUP_PATH=/backups
-      - BACKUP_RETENTION_DAYS=30
     entrypoint: ["/bin/sh", "-c"]
+    # Inlined backup loop (no external script needed). The `$$` escapes prevent
+    # docker compose from interpolating these — they're expanded at runtime by sh.
     command:
       - |-
-        sh /pg-backup.sh || true
+        backup() {
+          ts=$$(date +%Y-%m-%d)
+          PGPASSWORD=$$POSTGRES_PASSWORD pg_dump \
+            --format=custom \
+            -h $$POSTGRES_HOST \
+            -U $$POSTGRES_USER \
+            -d $$POSTGRES_DB \
+            > $$BACKUP_PATH/dashboard-$$ts.dump
+          find $$BACKUP_PATH -name "*.dump" -mtime +$$BACKUP_RETENTION_DAYS -delete
+        }
+        backup || true
         while true; do
           sleep 86400
-          sh /pg-backup.sh || true
+          backup || true
         done
     restart: unless-stopped
 
