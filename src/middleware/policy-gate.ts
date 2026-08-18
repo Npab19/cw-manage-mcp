@@ -74,13 +74,19 @@ function wrapHandlerWithContextInjection(
 }
 
 /**
- * Wraps an McpServer so that calls to .tool(name, ...) (a) only register
- * tools the identity is permitted to call, and (b) prepend the caller's
- * merged context document to the first tool response per identity per
- * CONTEXT_AUTO_INJECT_TTL_MIN window (default 10 minutes; set to 0 to
- * disable). Disallowed tools never enter the server's internal registry,
- * so tools/list omits them and tools/call returns the SDK's standard
- * "tool not found" error.
+ * Wraps a tool-registration method (.tool() or .registerTool()) so that it
+ * (a) only registers tools the identity is permitted to call, and (b)
+ * prepends the caller's merged context document to the first tool response
+ * per identity per CONTEXT_AUTO_INJECT_TTL_MIN window (default 10 minutes;
+ * set to 0 to disable). Disallowed tools never enter the server's internal
+ * registry, so tools/list omits them and tools/call returns the SDK's
+ * standard "tool not found" error.
+ *
+ * Both registration methods take the tool name first and the handler last
+ * (.tool(name, description, schema, handler) vs .registerTool(name, config,
+ * handler)), so the same wrapping logic covers both — this is what lets
+ * MCP Apps tools (registered via registerAppTool -> server.registerTool)
+ * inherit the same identity gating as every other tool.
  *
  * Why TTL-based: stateless HTTP transport gives us no native concept of
  * "conversation start", so we approximate by tracking per-OAuth-sub
@@ -93,30 +99,38 @@ function wrapHandlerWithContextInjection(
  * from the auto-inject wrapper since its whole purpose is returning
  * the same content.
  */
+function gateRegistrationMethod(
+  value: (...args: unknown[]) => unknown,
+  target: McpServer,
+  identity: ResolvedIdentity | null,
+): (name: string, ...rest: unknown[]) => unknown {
+  return function (name: string, ...rest: unknown[]) {
+    if (!identity) return; // no identity -> no tools
+    if (!identityAllowsTool(identity, name)) return;
+    if (rest.length > 0) {
+      const lastIdx = rest.length - 1;
+      const handler = rest[lastIdx];
+      if (typeof handler === 'function') {
+        // Outer (called first) → inner (called last):
+        //   context-injection → field-redaction → original handler.
+        // Original handler runs first, redaction trims its response,
+        // then context-injection prepends the org context entry.
+        let wrapped = handler as (...args: unknown[]) => Promise<ToolResult>;
+        wrapped = wrapHandlerWithFieldRedaction(wrapped, identity, name);
+        wrapped = wrapHandlerWithContextInjection(wrapped, identity, name);
+        rest[lastIdx] = wrapped;
+      }
+    }
+    return value.call(target, name, ...rest);
+  };
+}
+
 export function gateServerWithPolicy(server: McpServer, identity: ResolvedIdentity | null): McpServer {
   return new Proxy(server, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
-      if (prop === 'tool' && typeof value === 'function') {
-        return function (this: unknown, name: string, ...rest: unknown[]) {
-          if (!identity) return; // no identity -> no tools
-          if (!identityAllowsTool(identity, name)) return;
-          if (rest.length > 0) {
-            const lastIdx = rest.length - 1;
-            const handler = rest[lastIdx];
-            if (typeof handler === 'function') {
-              // Outer (called first) → inner (called last):
-              //   context-injection → field-redaction → original handler.
-              // Original handler runs first, redaction trims its response,
-              // then context-injection prepends the org context entry.
-              let wrapped = handler as (...args: unknown[]) => Promise<ToolResult>;
-              wrapped = wrapHandlerWithFieldRedaction(wrapped, identity, name);
-              wrapped = wrapHandlerWithContextInjection(wrapped, identity, name);
-              rest[lastIdx] = wrapped;
-            }
-          }
-          return (value as (...args: unknown[]) => unknown).call(target, name, ...rest);
-        };
+      if ((prop === 'tool' || prop === 'registerTool') && typeof value === 'function') {
+        return gateRegistrationMethod(value as (...args: unknown[]) => unknown, target, identity);
       }
       return value;
     },

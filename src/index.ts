@@ -43,6 +43,7 @@ import { printBootstrapBanner } from './admin/setup.js';
 import { getSql } from './db.js';
 import { startCron } from './cron.js';
 import { registerContextResources } from './resources/context.js';
+import { registerBoardOverviewAppResource } from './resources/board-overview-app.js';
 import { seedGlobalContextIfMissing } from './bootstrap/context-seed.js';
 // @ts-expect-error -- express-ejs-layouts ships untyped, but it's a one-liner middleware.
 import expressLayouts from 'express-ejs-layouts';
@@ -98,6 +99,11 @@ function createServer(ctx: CwRequestContext, identity: ResolvedIdentity | null):
   // Context resources are not gated by the tool allow-list; access is
   // enforced per-resource at read time via assertReadAccess().
   registerContextResources(server, identity);
+
+  // MCP App UI resources are just static templates (no CW data baked in);
+  // the real access boundary is the tool that references them, which goes
+  // through the identity-gated `gated` server above.
+  registerBoardOverviewAppResource(server);
 
   return server;
 }

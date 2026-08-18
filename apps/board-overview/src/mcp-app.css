@@ -1,0 +1,91 @@
+:root {
+  --color-background-primary: light-dark(#ffffff, #171717);
+  --color-background-secondary: light-dark(#f5f5f5, #262626);
+  --color-text-primary: light-dark(#171717, #fafafa);
+  --color-text-secondary: light-dark(#525252, #a3a3a3);
+  --color-text-danger: light-dark(#b91c1c, #f87171);
+  --color-background-danger: light-dark(#fef2f2, #451a1a);
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --border-radius-md: 8px;
+  --bar-fill-color: light-dark(#2563eb, #60a5fa);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+}
+
+.board-overview {
+  padding: 16px 20px;
+}
+
+.header h1 {
+  font-size: 1.1rem;
+  margin: 0 0 2px;
+}
+
+.total {
+  margin: 0 0 16px;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.errors {
+  background: var(--color-background-danger);
+  color: var(--color-text-danger);
+  border-radius: var(--border-radius-md);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+}
+
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.chart-row .label {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  text-align: right;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-row .bar-track {
+  flex: 1;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  height: 22px;
+}
+
+.chart-row .bar-fill {
+  height: 100%;
+  background: var(--bar-fill-color);
+  border-radius: var(--border-radius-md);
+  min-width: 2px;
+}
+
+.chart-row .count {
+  width: 36px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}

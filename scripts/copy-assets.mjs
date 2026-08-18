@@ -5,6 +5,7 @@ const TARGETS = [
   { src: 'src/migrations', dest: 'dist/migrations', extension: '.sql' },
   { src: 'src/admin/views', dest: 'dist/admin/views', extension: '.ejs' },
   { src: 'src/admin/static', dest: 'dist/admin/static' },
+  { src: 'apps/board-overview/dist', dest: 'dist/apps/board-overview', extension: '.html' },
 ];
 
 async function copyDir(srcDir, destDir, extension) {
