@@ -19,6 +19,30 @@ interface EntraTokenResponse {
 
 const endpointsCacheByIssuer = new Map<string, EntraEndpoints>();
 
+const IDP_FETCH_TIMEOUT_MS = 10_000;
+
+/**
+ * undici collapses every transport-level failure into a bare `TypeError: fetch
+ * failed` and hides the real reason (DNS, TLS, proxy, timeout) on `.cause`.
+ * Unwrap it so the log names the host and the errno instead of a stack trace.
+ */
+async function fetchIdp(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(IDP_FETCH_TIMEOUT_MS) });
+  } catch (err) {
+    const cause = (err as { cause?: unknown }).cause;
+    const detail =
+      cause instanceof Error
+        ? `${(cause as NodeJS.ErrnoException).code ?? cause.name}: ${cause.message}`
+        : (err as Error).message;
+    throw new Error(
+      `Cannot reach the identity provider at ${url} — ${detail}. ` +
+        'Check that the issuer URL is correct and that this container has outbound HTTPS/DNS access.',
+      { cause: err },
+    );
+  }
+}
+
 export async function getEntraEndpoints(): Promise<EntraEndpoints> {
   const provider = await getOauthProvider();
   const issuer = provider?.issuer ?? '';
@@ -26,7 +50,7 @@ export async function getEntraEndpoints(): Promise<EntraEndpoints> {
   const cached = endpointsCacheByIssuer.get(issuer);
   if (cached) return cached;
   const url = `${issuer}/.well-known/openid-configuration`;
-  const resp = await fetch(url);
+  const resp = await fetchIdp(url);
   if (!resp.ok) {
     throw new Error(`Entra discovery failed: ${resp.status} ${resp.statusText} (${url})`);
   }
@@ -69,7 +93,7 @@ export async function exchangeCodeForToken(
     redirect_uri: redirectUri,
     code_verifier: codeVerifier,
   });
-  const resp = await fetch(endpoints.tokenEndpoint, {
+  const resp = await fetchIdp(endpoints.tokenEndpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,

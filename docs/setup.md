@@ -479,6 +479,24 @@ Future work tracked on the [roadmap](https://github.com/npab19/cw-manage-mcp#roa
   docker compose pull
   docker compose up -d
   ```
+- **Pin or roll back to an older image:**
+
+  Every push to `master` publishes immutable tags next to `latest` — `sha-<short-commit>`
+  (e.g. `sha-a1b2c3d`) and `build-<run-number>` (e.g. `build-42`). Released versions also
+  get semver tags. Browse them at
+  [the package page](https://github.com/npab19/cw-manage-mcp/pkgs/container/cw-manage-mcp).
+
+  ```sh
+  # in .env
+  APP_IMAGE_TAG=build-41
+
+  docker compose up -d      # pulls and restarts on the pinned tag
+  ```
+
+  Remove `APP_IMAGE_TAG` (or set it to `latest`) to resume tracking master. Rolling the
+  image back does **not** roll back the database — if the version you're leaving applied a
+  schema migration, restore a dump from the same era alongside it.
+
 - **View logs:**
   ```sh
   docker compose logs -f cw-manage-mcp

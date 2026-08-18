@@ -22,7 +22,7 @@ const PREFIX_LEN = 8;
 const SECRET_LEN = 32;
 const KEY_RE = /^sa_([0-9a-f]{8})_([A-Za-z0-9_-]{32,})$/;
 
-const ARGON2_OPTS: argon2.Options = {
+const ARGON2_OPTS: argon2.HashOptions = {
   type: argon2.argon2id,
   memoryCost: 19_456,
   timeCost: 2,

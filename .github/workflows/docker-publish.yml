@@ -29,8 +29,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # `latest` is a moving pointer; the sha- and build- tags are immutable
+          # per-push handles, so any past build stays pullable for rollback.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=raw,value=build-${{ github.run_number }},enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
