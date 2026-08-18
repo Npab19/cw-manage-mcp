@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { getConfig } from './config.js';
 import { runUserImport } from './import/cw-users.js';
 import { getSql } from './db.js';
@@ -7,8 +7,8 @@ const DEFAULT_USER_IMPORT_CRON = '0 2 * * *';
 const AUDIT_PRUNE_CRON = '15 3 * * *'; // 3:15 AM nightly — staggered from user import
 const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 90;
 
-let userImportTask: cron.ScheduledTask | null = null;
-let auditPruneTask: cron.ScheduledTask | null = null;
+let userImportTask: ScheduledTask | null = null;
+let auditPruneTask: ScheduledTask | null = null;
 
 async function resolveUserImportSchedule(): Promise<string> {
   const fromDb = await getConfig<string>('sync.user_import_cron', () => DEFAULT_USER_IMPORT_CRON);

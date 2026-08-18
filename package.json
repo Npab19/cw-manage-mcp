@@ -1,6 +1,6 @@
 {
   "name": "cw-manage-mcp",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Read-only MCP server for ConnectWise Manage reporting",
   "type": "module",
   "main": "dist/index.js",
@@ -10,26 +10,26 @@
     "dev": "node --loader ts-node/esm src/index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "argon2": "^0.44.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "argon2": "^0.45.1",
     "cookie-parser": "^1.4.7",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.4.2",
     "ejs": "^5.0.2",
-    "express": "^4.21.2",
+    "express": "^4.22.2",
     "express-ejs-layouts": "^2.5.1",
-    "jose": "^6.2.3",
-    "node-cron": "^4.2.1",
-    "p-limit": "^3.1.0",
+    "jose": "^6.2.9",
+    "node-cron": "^4.6.0",
+    "p-limit": "^7.3.1",
     "postgres": "^3.4.9",
-    "zod": "^3.23.8"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
     "@types/ejs": "^3.1.5",
     "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.1",
     "@types/node-cron": "^3.0.11",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.9.3"
   }
 }
