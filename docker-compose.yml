@@ -10,7 +10,9 @@ services:
   cw-manage-mcp:
     # Pre-built image from GitHub Container Registry. To build locally,
     # comment out `image:` and uncomment `build: .`.
-    image: ghcr.io/npab19/cw-manage-mcp:latest
+    # Defaults to `latest`; set APP_IMAGE_TAG in .env to pin or roll back to a
+    # specific build (e.g. sha-a1b2c3d or build-42), then `docker compose up -d`.
+    image: ghcr.io/npab19/cw-manage-mcp:${APP_IMAGE_TAG:-latest}
     # build: .
     expose:
       - "3000"
