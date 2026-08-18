@@ -1,9 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { cwFetch, cwFetchNextPage, handleToolCall } from '../client.js';
 import { CwRequestContext, PaginationParams } from '../types.js';
 import { addTool, escapeConditionLiteral, idSchema } from './helper.js';
 import { resolveBoardFilter, boardFilterCondition } from '../composites/aliases.js';
+import { BOARD_OVERVIEW_UI_RESOURCE_URI } from '../resources/board-overview-app.js';
 
 const boardFilterSchema = z
   .union([
@@ -272,11 +274,19 @@ export function register(server: McpServer, ctx: CwRequestContext): void {
   );
 
   // ── get_board_overview ──────────────────────────────────────────────
-  addTool(
+  // Registered via registerAppTool (not addTool) so it links to the
+  // interactive bar-chart UI at BOARD_OVERVIEW_UI_RESOURCE_URI. The
+  // policy gate wraps both .tool() and .registerTool() identically, so
+  // this still goes through identity allow-listing and field redaction.
+  registerAppTool(
     server,
     'get_board_overview',
-    'Board overview: details, statuses, and ticket counts per status (up to 5000 open tickets sampled).',
-    { id: idSchema('Board ID') },
+    {
+      description:
+        'Board overview: details, statuses, and ticket counts per status (up to 5000 open tickets sampled).',
+      inputSchema: { id: idSchema('Board ID') },
+      _meta: { ui: { resourceUri: BOARD_OVERVIEW_UI_RESOURCE_URI } },
+    },
     (args) =>
       handleToolCall(ctx, async (c) => {
         const [board, statuses, tickets] = await Promise.all([
